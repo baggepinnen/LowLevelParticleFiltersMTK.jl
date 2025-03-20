@@ -77,16 +77,16 @@ D = ModelingToolkit.D_nounits
     end
 end
 
-@named model = SimpleSys() # Do not use @mtkbuild here
-cmodel = complete(model) # complete is required for variable indexing since we did not use @mtkbuild above
-inputs  = [cmodel.u]     # The (unbound) inputs to the system
-outputs = [cmodel.y]     # The outputs for which we obtain measurements
+@named model = SimpleSys()  # Do not use @mtkbuild here
+cmodel  = complete(model)   # complete is required for variable indexing since we did not use @mtkbuild above
+inputs  = [cmodel.u]        # The (unbound) inputs to the system
+outputs = [cmodel.y]        # The outputs for which we obtain measurements
 disturbance_inputs = [cmodel.w] # The dynamics disturbance inputs to the system
 
 nu = length(inputs)             # Number of inputs
 nw = length(disturbance_inputs) # Number of disturbance inputs
 ny = length(outputs)            # Number of measured outputs
-R1 = SMatrix{nw,nw}(0.01I(nw))   # Dynamics noise covariance
+R1 = SMatrix{nw,nw}(0.01I(nw))  # Dynamics noise covariance
 R2 = SMatrix{ny,ny}(0.1I(ny))   # Measurement noise covariance
 
 df = SimpleMvNormal(R1)         # Dynamics noise distribution. This has to be a Gaussian if using a Kalman-type filter
@@ -102,7 +102,7 @@ ekf = get_filter(prob, ExtendedKalmanFilter)
 ukf = get_filter(prob, UnscentedKalmanFilter)
 
 # Simulate some data from the trajectory distribution implied by the model
-u = [randn(nu) for _ in 1:30] # A random input sequence
+u     = [randn(nu) for _ in 1:30] # A random input sequence
 x,u,y = simulate(ekf, u, dynamics_noise=true, measurement_noise=true)
 
 # Perform the filtering in batch since the entire input-output sequence is available
@@ -113,25 +113,25 @@ fsolu = forward_trajectory(ukf, u, y)
 sole = StateEstimationSolution(fsole, prob)
 solu = StateEstimationSolution(fsolu, prob)
 
-# We can access the solution to any variable in the model easily
+## We can access the solution to any variable in the model easily
 sole[cmodel.x] == sole[cmodel.y]
 
-# We can also obtain the solution as a trajectory of probability distributions
+## We can also obtain the solution as a trajectory of probability distributions
 sole[cmodel.x, dist=true]
 
-# We can plot the filter solution object using the plot recipe from LowLevelParticleFilters
+## We can plot the filter solution object using the plot recipe from LowLevelParticleFilters
 using Plots
 plot(fsole, size=(1000, 1000))
 plot!(fsole.t, reduce(hcat, x)', lab="True x")
-
+##
 plot(fsolu, size=(1000, 1000))
 plot!(fsolu.t, reduce(hcat, x)', lab="True x")
 
-# We can also plot the wrapped solution object
+## We can also plot the wrapped solution object
 plot(sole)
 plot!(solu)
 
-# The wrapped solution object allows for symbolic indexing,
+## The wrapped solution object allows for symbolic indexing,
 # note how we can easily plot the posterior distribution over y^2 + 0.1*sin(u) 
 plot(sole, idxs=cmodel.y^2 + 0.1*sin(cmodel.u))
 plot!(solu, idxs=cmodel.y^2 + 0.1*sin(cmodel.u))
