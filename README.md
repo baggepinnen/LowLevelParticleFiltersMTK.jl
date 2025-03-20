@@ -136,3 +136,106 @@ plot!(solu)
 plot(sole, idxs=cmodel.y^2 + 0.1*sin(cmodel.u))
 plot!(solu, idxs=cmodel.y^2 + 0.1*sin(cmodel.u))
 ```
+
+# API
+The following is a summary of the exported functions, followed by their docstrings
+## Summary
+- `StateEstimationProblem`: A structure representing a state-estimation problem.
+- `StateEstimationSolution`: A solution object that provides symbolic indexing to a `KalmanFilteringSolution` object.
+- `get_filter`: Instantiate a filter from a state-estimation problem.
+- `propagate_distribution`: Propagate a probability distribution `dist` through a nonlinear function `f` using the covariance-propagation method of filter `kf`.
+
+
+# `StateEstimationProblem`
+```
+StateEstimationProblem(model, inputs, outputs; disturbance_inputs, discretization, Ts, df, dg, d0)
+```
+
+A structure representing a state-estimation problem.
+
+## Arguments:
+
+  * `model`: An MTK ODESystem model, this model must not have undergone structural simplification.
+  * `inputs`: The inputs to the dynamical system, a vector of symbolic variables that must be of type `@variables`.
+  * `outputs`: The outputs of the dynamical system, a vector of symbolic variables that must be of type `@variables`.
+  * `disturbance_inputs`: The disturbance inputs to the dynamical system, a vector of symbolic variables that must be of type `@variables`. These disturbance inputs indicate where dynamics noise $w$ enters the system. The probability distribution $d_f$ is defined over these variables.
+  * `discretization`: A function `discretization(f_cont, Ts, ndiff, nalg, nu) = f_disc` that takes a continuous-tiem dynamics function `f_cont(x,u,p,t)` and returns a discrete-time dynamics function `f_disc(x,u,p,t)`. `ndiff` is the number of differential state variables, `nalg` is the number of algebraic variables, and `nu` is the number of inputs.
+  * `Ts`: The discretization time step.
+  * `df`: The probability distribution of the dynamics noise $w$. When using Kalman-type estimators, this must be a `MvNormal` or `SimpleMvNormal` distribution.
+  * `dg`: The probability distribution of the measurement noise $e$. When using Kalman-type estimators, this must be a `MvNormal` or `SimpleMvNormal` distribution.
+  * `d0`: The probability distribution of the initial state $x_0$. When using Kalman-type estimators, this must be a `MvNormal` or `SimpleMvNormal` distribution.
+
+## Usage:
+
+Pseudocode
+
+```julia
+prob      = StateEstimationProblem(...)
+kf        = get_filter(prob, ExtendedKalmanFilter)      # or UnscentedKalmanFilter
+filtersol = forward_trajectory(kf, u, y)
+sol       = StateEstimationSolution(filtersol, prob)   # Package into higher-level solution object
+plot(sol, idxs=[prob.state; prob.outputs; prob.inputs]) # Plot the solution
+```
+
+# `StateEstimationSolution`
+```julia
+StateEstimationSolution(sol::KalmanFilteringSolution, prob::StateEstimationProblem)
+```
+
+A solution object that provides symbolic indexing to a `KalmanFilteringSolution` object.
+
+## Fields:
+
+  * `sol`:  a `KalmanFilteringSolution` object.
+  * `prob`: a `StateEstimationProblem` object.
+
+## Example
+
+```julia
+sol = StateEstimationSolution(kfsol, prob)
+sol[model.x]                 # Index with a variable
+sol[model.y^2]               # Index with an expression
+sol[model.y^2, dist=true]    # Obtain the posterior probability distribution of the provided expression
+sol[model.y^2, Nsamples=100] # Draw 100 samples from the posterior distribution of the provided expression
+```
+
+# `get_filter`
+```julia
+get_filter(prob::StateEstimationProblem, ::Type{ExtendedKalmanFilter}; constant_R1=true, kwargs)
+get_filter(prob::StateEstimationProblem, ::Type{UnscentedKalmanFilter}; kwargs)
+```
+
+Instantiate a filter from a state-estimation problem. `kwargs` are sent to the filter constructor.
+
+If `constant_R1=true`, the dynamics noise covariance matrix `R1` is assumed to be constant and is computed at the initial state. Otherwise, `R1` is computed at each time step throug repeated linearization w.r.t. the disturbance inputs `w`.
+
+# `propagate_distribution`
+```julia
+propagate_distribution(f, kf, dist, args...; kwargs...)
+```
+
+Propagate a probability distribution `dist` through a nonlinear function `f` using the covariance-propagation method of filter `kf`.
+
+## Arguments:
+
+  * `f`: A nonlinear function `f(x, args...; kwargs...)` that takes a vector `x` and returns a vector.
+  * `kf`: A state estimator, such as an `ExtendedKalmanFilter` or `UnscentedKalmanFilter`.
+  * `dist`: A probability distribution, such as a `MvNormal` or `SimpleMvNormal`.
+  * `args`: Additional arguments to `f`.
+  * `kwargs`: Additional keyword arguments to `f`.
+
+
+
+
+
+# Generate docs
+```julia
+io = IOBuffer()
+for n in names(LowLevelParticleFiltersMTK)
+    n === :LowLevelParticleFiltersMTK && continue
+    println(io, "# `", n, "`")
+    println(io, Base.Docs.doc(getfield(LowLevelParticleFiltersMTK, n)))
+end
+s = String(take!(io))
+clipboard(s)
+```

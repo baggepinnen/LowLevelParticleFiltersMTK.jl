@@ -43,7 +43,7 @@ end
 
 A structure representing a state-estimation problem.
 
-# Arguments:
+## Arguments:
 - `model`: An MTK ODESystem model, this model must not have undergone structural simplification.
 - `inputs`: The inputs to the dynamical system, a vector of symbolic variables that must be of type `@variables`.
 - `outputs`: The outputs of the dynamical system, a vector of symbolic variables that must be of type `@variables`.
@@ -123,15 +123,15 @@ end
 
 
 """
-    StateEstimationSolution
+    StateEstimationSolution(kfsol, prob)
 
-A solution object that provides symbolic indexing to a `KalmanFilterSolution` object.
+A solution object that provides symbolic indexing to a `KalmanFilteringSolution` object.
 
-# Fields:
-- `sol`:  a `KalmanFilterSolution` object.
+## Fields:
+- `sol`:  a `KalmanFilteringSolution` object.
 - `prob`: a `StateEstimationProblem` object.
 
-# Example
+## Example
 ```julia
 sol = StateEstimationSolution(kfsol, prob)
 sol[model.x]                 # Index with a variable
@@ -223,7 +223,7 @@ end
 
 Propagate a probability distribution `dist` through a nonlinear function `f` using the covariance-propagation method of filter `kf`.
 
-# Arguments:
+## Arguments:
 - `f`: A nonlinear function `f(x, args...; kwargs...)` that takes a vector `x` and returns a vector.
 - `kf`: A state estimator, such as an `ExtendedKalmanFilter` or `UnscentedKalmanFilter`.
 - `dist`: A probability distribution, such as a `MvNormal` or `SimpleMvNormal`.
