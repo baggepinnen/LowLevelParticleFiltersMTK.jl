@@ -3,11 +3,30 @@ uuid = "6906b499-63f5-4dd8-acfd-28b0f8b24f7d"
 authors = ["Fredrik Bagge Carlson"]
 version = "1.0.0-DEV"
 
+[deps]
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+LowLevelParticleFilters = "d9d29d28-c116-5dba-9239-57a5fe23875b"
+ModelingToolkit = "961ee093-0014-501f-94e3-6117800e7a78"
+MonteCarloMeasurements = "0987c9cc-fe09-11e8-30f0-b96dd679fdca"
+RecipesBase = "3cdcf5f2-1ef4-517c-9805-6587b60abb01"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
+Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
+
 [compat]
+ForwardDiff = "0.10.38"
+LinearAlgebra = "1.11.0"
+ModelingToolkit = "9.60.0 - 9.66.0"
+MonteCarloMeasurements = "1.4.5"
+RecipesBase = "1.3.4"
+StaticArrays = "1.9.13"
+Statistics = "1.11.1"
 julia = "1.11"
 
 [extras]
+Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+SeeToDee = "1c904df7-48cd-41e7-921b-d889ed9a470c"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test"]
+test = ["Test", "Plots", "SeeToDee"]
