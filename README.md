@@ -93,7 +93,10 @@ df = SimpleMvNormal(R1)         # Dynamics noise distribution. This has to be a 
 dg = SimpleMvNormal(R2)         # Measurement noise distribution. This has to be a Gaussian if using a Kalman-type filter
 
 Ts = 0.1                        # Sampling interval
-discretization = (f,Ts,ndiff,nalg,nu)->SeeToDee.Rk4(f, Ts) # Discretization method
+discretization = function (f,Ts,ndiff,nalg,nu)
+  iszero(nalg) || error("Rk4 only handles differential equations, consider `Trapezoidal` instead")
+  SeeToDee.Rk4(f, Ts) # Discretization method
+end
 
 prob = StateEstimationProblem(model, inputs, outputs; disturbance_inputs, df, dg, discretization, Ts)
 
