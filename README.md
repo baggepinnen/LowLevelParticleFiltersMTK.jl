@@ -6,9 +6,9 @@
 A helper package for state-estimation workflows using [LowLevelParticleFilters.jl](https://github.com/baggepinnen/LowLevelParticleFilters.jl) with [ModelingToolkit](https://github.com/SciML/ModelingToolkit.jl/) models.
 
 # Installation
-The package is not registered, you need to install it using the URL:
+The package is registered, you can install it using:
 ```julia
-import Pkg; Pkg.add(url="https://github.com/baggepinnen/LowLevelParticleFiltersMTK.jl")
+import Pkg; Pkg.add("LowLevelParticleFiltersMTK")
 ```
 
 # Challenges with performing state estimation with ModelingToolkit models
