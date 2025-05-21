@@ -52,7 +52,8 @@ A structure representing a state-estimation problem.
 - `Ts`: The discretization time step.
 - `df`: The probability distribution of the dynamics noise ``w``. When using Kalman-type estimators, this must be a `MvNormal` or `SimpleMvNormal` distribution.
 - `dg`: The probability distribution of the measurement noise ``e``. When using Kalman-type estimators, this must be a `MvNormal` or `SimpleMvNormal` distribution.
-- `x0map`: A dictionary mapping symbolic variables to their initial values. If a variable is not provided, it is assumed to be initialized to zero.
+- `x0map`: A dictionary mapping symbolic variables to their initial values. If a variable is not provided, it is assumed to be initialized to zero. The value can be a scalar number, in which case the covariance of the initial state is set to `σ0^2*I(nx)`, and the value can be a `Distributions.Normal`, in which case the provided distributions are used as the distribution of the initial state. When passing distributions, all state variables must be provided values.
+- `σ0`: The standard deviation of the initial state. This is used when `x0map` is not provided or when the values in `x0map` are scalars.
 - `pmap`: A dictionary mapping symbolic variables to their values. If a variable is not provided, it is assumed to be initialized to zero.
 
 ## Usage:
@@ -92,12 +93,27 @@ function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, disc
 
     # Handle initial distribution
     pmap = merge(Dict(disturbance_inputs .=> 0.0), Dict(pmap)) # Make sure disturbance inputs are initialized to zero if they are not explicitly provided in pmap
+    if !(valtype(x0map) <: Number)
+        stdmap = map(collect(x0map)) do (sym, dist)
+            sym => dist.σ
+        end |> Dict
+        x0map = map(collect(x0map)) do (sym, dist)
+            sym => dist.μ
+        end
+        dists = true
+    else
+        dists = false
+    end
     initprob = ModelingToolkit.InitializationProblem(iosys, 0.0, x0map, pmap)
     initsol = solve(initprob, ModelingToolkit.FastShortcutNonlinearPolyalg())
 
     p = Tuple(initprob.ps[p] for p in ps) # Use tuple instead of heterogeneously typed array for better performance
     x0 = SVector{nx}(initsol[x_sym])
-    d0 = SimpleMvNormal(x0, σ0^2*I(nx)) # TODO: don't hardcode covariance
+    if dists
+        d0 = SimpleMvNormal(x0, diagm([stdmap[Num(sym)]^2 for sym in x_sym]))
+    else
+        d0 = SimpleMvNormal(x0, σ0^2*I(nx))
+    end
 
     names = SignalNames(x = string.(x_sym), u = string.(inputs), y = string.(outputs), name = "")
 
