@@ -5,6 +5,7 @@ using ModelingToolkit
 using LowLevelParticleFilters
 using LowLevelParticleFilters: SimpleMvNormal
 using MonteCarloMeasurements
+using Distributions
 using ForwardDiff
 using LinearAlgebra, Statistics
 using StaticArrays
@@ -93,7 +94,8 @@ function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, disc
 
     # Handle initial distribution
     pmap = merge(Dict(disturbance_inputs .=> 0.0), Dict(pmap)) # Make sure disturbance inputs are initialized to zero if they are not explicitly provided in pmap
-    if !(valtype(Dict(x0map)) <: Number)
+    x0map = collect(x0map)
+    if !isempty(x0map) && (x0map[1][2] isa Distribution)
         stdmap = map(collect(x0map)) do (sym, dist)
             sym => dist.σ
         end |> Dict
@@ -243,7 +245,7 @@ end
     end
 end
 
-@recipe function solplot(timevec, osol::StateEstimationSolution)
+@recipe function solplot(osol::StateEstimationSolution)
     sol = osol.sol
     timevec = sol.t
     @series timevec, osol
