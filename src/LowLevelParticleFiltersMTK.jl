@@ -93,7 +93,7 @@ function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, disc
 
     # Handle initial distribution
     pmap = merge(Dict(disturbance_inputs .=> 0.0), Dict(pmap)) # Make sure disturbance inputs are initialized to zero if they are not explicitly provided in pmap
-    if !(valtype(x0map) <: Number)
+    if !(valtype(Dict(x0map)) <: Number)
         stdmap = map(collect(x0map)) do (sym, dist)
             sym => dist.σ
         end |> Dict
