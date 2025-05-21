@@ -219,9 +219,7 @@ function Base.getindex(osol::StateEstimationSolution, sym; dist=false, Nsamples:
     end
 end
 
-@recipe function solplot(osol::StateEstimationSolution; prob = osol.prob, idxs=[prob.state; prob.outputs; prob.inputs], Nsamples=1, plotRt=true)
-    sol = osol.sol
-    timevec = sol.t
+@recipe function solplot(timevec, osol::StateEstimationSolution; prob = osol.prob, idxs=[prob.state; prob.outputs; prob.inputs], Nsamples=1, plotRt=true)
     n = length(idxs)
     layout --> n
     if plotRt
@@ -243,6 +241,12 @@ end
             timevec, getindex.(y, i)
         end
     end
+end
+
+@recipe function solplot(timevec, osol::StateEstimationSolution)
+    sol = osol.sol
+    timevec = sol.t
+    @series timevec, osol
 end
 
 
