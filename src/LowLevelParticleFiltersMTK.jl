@@ -3,7 +3,7 @@ module LowLevelParticleFiltersMTK
 
 using ModelingToolkit
 using LowLevelParticleFilters
-using LowLevelParticleFilters: SimpleMvNormal
+using LowLevelParticleFilters: SimpleMvNormal, AbstractKalmanFilter
 using MonteCarloMeasurements
 using Distributions
 using ForwardDiff
@@ -12,7 +12,7 @@ using StaticArrays
 using RecipesBase
 using ModelingToolkit: generate_control_function, build_explicit_observed_function
 
-export StateEstimationProblem, StateEstimationSolution, get_filter, propagate_distribution
+export StateEstimationProblem, StateEstimationSolution, get_filter, propagate_distribution, EstimatedOutput
 
 struct StateEstimationProblem
     model
@@ -187,6 +187,41 @@ end
 
 Base.propertynames(sol::StateEstimationSolution) = (fieldnames(typeof(sol))..., propertynames(getfield(sol, :sol))...)
 
+"""
+    EstimatedOutput(kf, prob, sym)
+
+Create an output function that can be called like
+```
+g(x::Vector,    u, p, t)     # Compute an output
+g(xR::MvNormal, u, p, t)     # Compute an output distribution given input distribution xR
+g(kf,           u, p, t)     # Compute an output distribution given the current state of an AbstractKalmanFilter
+```
+
+# Arguments:
+- `kf`: A Kalman type filter
+- `prob`: A `StateEstimationProblem` object
+- `sym`: A symbolic expression or vector of symbolic expressions that the function should output.
+"""
+struct EstimatedOutput
+    kf
+    prob
+    g
+    function EstimatedOutput(kf, prob, sym)
+        g = ModelingToolkit.build_explicit_observed_function(prob.iosys, sym; prob.inputs, prob.disturbance_inputs)
+        new(kf, prob, g)
+    end
+end
+
+(gg::EstimatedOutput)(x::AbstractVector, u, p=gg.kf.p, t=gg.kf.t) = gg.g(x, u, p, t)
+function (gg::EstimatedOutput)(kf::AbstractKalmanFilter, u, args...; kwargs...)
+    x = kf.x
+    R = kf.R
+    gg(SimpleMvNormal(x,R),u,args...)
+end
+
+function (gg::EstimatedOutput)(xR::SimpleMvNormal, u, p = gg.kf.p, t = gg.kf.t, args...; kwargs...)
+    propagate_distribution(gg.g, gg.kf, xR, u, p, t, args...; kwargs...)
+end
 
 function Base.getindex(osol::StateEstimationSolution, sym; dist=false, Nsamples::Int = 1)
     prob = osol.prob
@@ -208,11 +243,11 @@ function Base.getindex(osol::StateEstimationSolution, sym; dist=false, Nsamples:
     end
 
     if dist
-        g = ModelingToolkit.build_explicit_observed_function(prob.iosys, vcat(sym); prob.inputs, prob.disturbance_inputs)
+        g = EstimatedOutput(f, prob, vcat(sym))# ModelingToolkit.build_explicit_observed_function(prob.iosys, vcat(sym); prob.inputs, prob.disturbance_inputs)
         timevec = range(0, step=f.Ts, length=length(sol.xt))
-        return [propagate_distribution(g, f, SimpleMvNormal(sol.xt[i], sol.Rt[i]), sol.u[i], f.p, timevec[i]) for i in eachindex(sol.xt)]
+        return [g(SimpleMvNormal(sol.xt[i], sol.Rt[i]), sol.u[i], f.p, timevec[i]) for i in eachindex(sol.xt)]
     end
-    g = ModelingToolkit.build_explicit_observed_function(prob.iosys, sym; prob.inputs, prob.disturbance_inputs)
+    g = EstimatedOutput(f, prob, sym) # ModelingToolkit.build_explicit_observed_function(prob.iosys, sym; prob.inputs, prob.disturbance_inputs)
     timevec = range(0, step=f.Ts, length=length(sol.xt))
     if Nsamples <= 1
         [g(sol.xt[i], sol.u[i], f.p, timevec[i]) for i in eachindex(sol.xt)]
