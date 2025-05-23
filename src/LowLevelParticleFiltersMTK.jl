@@ -202,13 +202,13 @@ g(kf,           u, p, t)     # Compute an output distribution given the current 
 - `prob`: A `StateEstimationProblem` object
 - `sym`: A symbolic expression or vector of symbolic expressions that the function should output.
 """
-struct EstimatedOutput
-    kf
-    prob
-    g
+struct EstimatedOutput{KF, P, G}
+    kf::KF
+    prob::P
+    g::G
     function EstimatedOutput(kf, prob, sym)
         g = ModelingToolkit.build_explicit_observed_function(prob.iosys, sym; prob.inputs, prob.disturbance_inputs)
-        new(kf, prob, g)
+        new{typeof(kf), typeof(prob), typeof(g)}(kf, prob, g)
     end
 end
 
@@ -256,14 +256,14 @@ function Base.getindex(osol::StateEstimationSolution, sym; dist=false, Nsamples:
     end
 end
 
-@recipe function solplot(timevec, osol::StateEstimationSolution; prob = osol.prob, idxs=[prob.state; prob.outputs; prob.inputs], Nsamples=1, plotRt=true)
+@recipe function solplot(timevec, osol::StateEstimationSolution; prob = osol.prob, idxs=[prob.state; prob.outputs; prob.inputs], Nsamples=1, plotRt=true, σ=1.96)
     n = length(idxs)
     layout --> n
     if plotRt
         dists = osol[vcat(idxs), dist=true]
         y = [mean(d) for d in dists]
         R = [cov(d) for d in dists]
-        twoσ = 1.96 .* sqrt.(reduce(hcat, diag.(R))')
+        twoσ = σ .* sqrt.(reduce(hcat, diag.(R))')
     else
         y = osol[vcat(idxs), Nsamples=Nsamples]
     end
