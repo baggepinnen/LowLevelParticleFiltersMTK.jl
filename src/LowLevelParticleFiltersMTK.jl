@@ -223,7 +223,7 @@ function (gg::EstimatedOutput)(xR::SimpleMvNormal, u, p = gg.kf.p, t = gg.kf.t, 
     propagate_distribution(gg.g, gg.kf, xR, u, p, t, args...; kwargs...)
 end
 
-function Base.getindex(osol::StateEstimationSolution, sym; dist=false, Nsamples::Int = 1)
+function Base.getindex(osol::StateEstimationSolution, sym; dist=false, Nsamples::Int = 1, inds=eachindex(osol.sol.xt))
     prob = osol.prob
     sol = osol.sol
     f = sol.f
@@ -233,7 +233,7 @@ function Base.getindex(osol::StateEstimationSolution, sym; dist=false, Nsamples:
             if Nsamples <= 1
                 return getindex.(sol.xt, i)
             else
-                return [Particles(Nsamples, Normal(sol.xt[t][i], sqrt(sol.Rt[t][i,i])))  for t in eachindex(sol.xt)]
+                return [Particles(Nsamples, Normal(sol.xt[t][i], sqrt(sol.Rt[t][i,i])))  for t in inds]
             end
         end
         i = findfirst(isequal(sym), prob.inputs)
@@ -245,14 +245,14 @@ function Base.getindex(osol::StateEstimationSolution, sym; dist=false, Nsamples:
     if dist
         g = EstimatedOutput(f, prob, vcat(sym))# ModelingToolkit.build_explicit_observed_function(prob.iosys, vcat(sym); prob.inputs, prob.disturbance_inputs)
         timevec = range(0, step=f.Ts, length=length(sol.xt))
-        return [g(SimpleMvNormal(sol.xt[i], sol.Rt[i]), sol.u[i], f.p, timevec[i]) for i in eachindex(sol.xt)]
+        return [g(SimpleMvNormal(sol.xt[i], sol.Rt[i]), sol.u[i], f.p, timevec[i]) for i in inds]
     end
     g = EstimatedOutput(f, prob, sym) # ModelingToolkit.build_explicit_observed_function(prob.iosys, sym; prob.inputs, prob.disturbance_inputs)
     timevec = range(0, step=f.Ts, length=length(sol.xt))
     if Nsamples <= 1
-        [g(sol.xt[i], sol.u[i], f.p, timevec[i]) for i in eachindex(sol.xt)]
+        [g(sol.xt[i], sol.u[i], f.p, timevec[i]) for i in inds]
     else
-        [g(Particles(Nsamples, MvNormal(sol.xt[i], sol.Rt[i])), sol.u[i], f.p, timevec[i]) for i in eachindex(sol.xt)]
+        [g(Particles(Nsamples, MvNormal(sol.xt[i], sol.Rt[i])), sol.u[i], f.p, timevec[i]) for i in inds]
     end
 end
 
@@ -302,7 +302,7 @@ Propagate a probability distribution `dist` through a nonlinear function `f` usi
 function propagate_distribution(f, kf::ExtendedKalmanFilter, x, args...; kwargs...)
     hasproperty(x, :μ) || error("Expected x to be a MvNormal or SimpleMvNormal")
     m,S = mean(x), cov(x)
-    C = ForwardDiff.jacobian(m->f(m, args...; kwargs...), m)
+    C = ForwardDiff.jacobian(m->vcat(f(m, args...; kwargs...)), m) # vcat is a hack to ensure array output
     my = f(m, args...; kwargs...)
     Sy = C * S * C'
     return SimpleMvNormal(my, Sy)
