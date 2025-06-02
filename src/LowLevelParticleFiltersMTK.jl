@@ -71,6 +71,7 @@ function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, disc
 
     # We always generate two versions of the dynamics function, the difference between them is that one has a signature augmented with disturbance inputs w, f(x,u,p,t,w), and the other does not, f(x,u,p,t).
     # The particular filter used for estimation dictates which version of the dynamics function will be used.
+    model = mtkcompile(model; inputs, outputs, disturbance_inputs, simplify = true, split = false)
     f, x_sym, ps, iosys = generate_control_function(model, inputs, disturbance_inputs; simplify = true, split=false, force_SA=true, disturbance_argument=false, kwargs...);
     f_aug, _ = generate_control_function(model, inputs, disturbance_inputs; simplify = true, split=false, force_SA=true, disturbance_argument=true, kwargs...);
 
@@ -106,7 +107,11 @@ function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, disc
     else
         dists = false
     end
-    initprob = ModelingToolkit.InitializationProblem(iosys, 0.0, x0map, pmap)
+
+    # Merge x0map and pmap into a single op mapping for InitializationProblem
+    op = Dict(x0map)
+    merge!(op, pmap)
+    initprob = ModelingToolkit.InitializationProblem(iosys, 0.0, op)
     initsol = solve(initprob, ModelingToolkit.FastShortcutNonlinearPolyalg())
 
     p = Tuple(initprob.ps[p] for p in ps) # Use tuple instead of heterogeneously typed array for better performance
