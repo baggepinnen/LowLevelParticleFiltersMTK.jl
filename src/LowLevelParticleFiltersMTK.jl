@@ -3,15 +3,16 @@ module LowLevelParticleFiltersMTK
 
 using ModelingToolkit
 using LowLevelParticleFilters
-using LowLevelParticleFilters: SimpleMvNormal
+using LowLevelParticleFilters: SimpleMvNormal, AbstractKalmanFilter
 using MonteCarloMeasurements
+using Distributions
 using ForwardDiff
 using LinearAlgebra, Statistics
 using StaticArrays
 using RecipesBase
 using ModelingToolkit: generate_control_function, build_explicit_observed_function
 
-export StateEstimationProblem, StateEstimationSolution, get_filter, propagate_distribution
+export StateEstimationProblem, StateEstimationSolution, get_filter, propagate_distribution, EstimatedOutput
 
 struct StateEstimationProblem
     model
@@ -52,7 +53,8 @@ A structure representing a state-estimation problem.
 - `Ts`: The discretization time step.
 - `df`: The probability distribution of the dynamics noise ``w``. When using Kalman-type estimators, this must be a `MvNormal` or `SimpleMvNormal` distribution.
 - `dg`: The probability distribution of the measurement noise ``e``. When using Kalman-type estimators, this must be a `MvNormal` or `SimpleMvNormal` distribution.
-- `x0map`: A dictionary mapping symbolic variables to their initial values. If a variable is not provided, it is assumed to be initialized to zero.
+- `x0map`: A dictionary mapping symbolic variables to their initial values. If a variable is not provided, it is assumed to be initialized to zero. The value can be a scalar number, in which case the covariance of the initial state is set to `σ0^2*I(nx)`, and the value can be a `Distributions.Normal`, in which case the provided distributions are used as the distribution of the initial state. When passing distributions, all state variables must be provided values.
+- `σ0`: The standard deviation of the initial state. This is used when `x0map` is not provided or when the values in `x0map` are scalars.
 - `pmap`: A dictionary mapping symbolic variables to their values. If a variable is not provided, it is assumed to be initialized to zero.
 
 ## Usage:
@@ -69,6 +71,7 @@ function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, disc
 
     # We always generate two versions of the dynamics function, the difference between them is that one has a signature augmented with disturbance inputs w, f(x,u,p,t,w), and the other does not, f(x,u,p,t).
     # The particular filter used for estimation dictates which version of the dynamics function will be used.
+    model = mtkcompile(model; inputs, outputs, disturbance_inputs, simplify = true, split = false)
     f, x_sym, ps, iosys = generate_control_function(model, inputs, disturbance_inputs; simplify = true, split=false, force_SA=true, disturbance_argument=false, kwargs...);
     f_aug, _ = generate_control_function(model, inputs, disturbance_inputs; simplify = true, split=false, force_SA=true, disturbance_argument=true, kwargs...);
 
@@ -92,12 +95,32 @@ function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, disc
 
     # Handle initial distribution
     pmap = merge(Dict(disturbance_inputs .=> 0.0), Dict(pmap)) # Make sure disturbance inputs are initialized to zero if they are not explicitly provided in pmap
-    initprob = ModelingToolkit.InitializationProblem(iosys, 0.0, x0map, pmap)
+    x0map = collect(x0map)
+    if !isempty(x0map) && (x0map[1][2] isa Distribution)
+        stdmap = map(collect(x0map)) do (sym, dist)
+            sym => dist.σ
+        end |> Dict
+        x0map = map(collect(x0map)) do (sym, dist)
+            sym => dist.μ
+        end
+        dists = true
+    else
+        dists = false
+    end
+
+    # Merge x0map and pmap into a single op mapping for InitializationProblem
+    op = Dict(x0map)
+    merge!(op, pmap)
+    initprob = ModelingToolkit.InitializationProblem(iosys, 0.0, op)
     initsol = solve(initprob, ModelingToolkit.FastShortcutNonlinearPolyalg())
 
     p = Tuple(initprob.ps[p] for p in ps) # Use tuple instead of heterogeneously typed array for better performance
     x0 = SVector{nx}(initsol[x_sym])
-    d0 = SimpleMvNormal(x0, σ0^2*I(nx)) # TODO: don't hardcode covariance
+    if dists
+        d0 = SimpleMvNormal(x0, diagm([stdmap[Num(sym)]^2 for sym in x_sym]))
+    else
+        d0 = SimpleMvNormal(x0, σ0^2*I(nx))
+    end
 
     names = SignalNames(x = string.(x_sym), u = string.(inputs), y = string.(outputs), name = "")
 
@@ -169,8 +192,43 @@ end
 
 Base.propertynames(sol::StateEstimationSolution) = (fieldnames(typeof(sol))..., propertynames(getfield(sol, :sol))...)
 
+"""
+    EstimatedOutput(kf, prob, sym)
 
-function Base.getindex(osol::StateEstimationSolution, sym; dist=false, Nsamples::Int = 1)
+Create an output function that can be called like
+```
+g(x::Vector,    u, p, t)     # Compute an output
+g(xR::MvNormal, u, p, t)     # Compute an output distribution given input distribution xR
+g(kf,           u, p, t)     # Compute an output distribution given the current state of an AbstractKalmanFilter
+```
+
+# Arguments:
+- `kf`: A Kalman type filter
+- `prob`: A `StateEstimationProblem` object
+- `sym`: A symbolic expression or vector of symbolic expressions that the function should output.
+"""
+struct EstimatedOutput{KF, P, G}
+    kf::KF
+    prob::P
+    g::G
+    function EstimatedOutput(kf, prob, sym)
+        g = ModelingToolkit.build_explicit_observed_function(prob.iosys, sym; prob.inputs, prob.disturbance_inputs)
+        new{typeof(kf), typeof(prob), typeof(g)}(kf, prob, g)
+    end
+end
+
+(gg::EstimatedOutput)(x::AbstractVector, u, p=gg.kf.p, t=gg.kf.t) = gg.g(x, u, p, t)
+function (gg::EstimatedOutput)(kf::AbstractKalmanFilter, u, args...; kwargs...)
+    x = kf.x
+    R = kf.R
+    gg(SimpleMvNormal(x,R),u,args...)
+end
+
+function (gg::EstimatedOutput)(xR::SimpleMvNormal, u, p = gg.kf.p, t = gg.kf.t, args...; kwargs...)
+    propagate_distribution(gg.g, gg.kf, xR, u, p, t, args...; kwargs...)
+end
+
+function Base.getindex(osol::StateEstimationSolution, sym; dist=false, Nsamples::Int = 1, inds=eachindex(osol.sol.xt))
     prob = osol.prob
     sol = osol.sol
     f = sol.f
@@ -180,7 +238,7 @@ function Base.getindex(osol::StateEstimationSolution, sym; dist=false, Nsamples:
             if Nsamples <= 1
                 return getindex.(sol.xt, i)
             else
-                return [Particles(Nsamples, Normal(sol.xt[t][i], sqrt(sol.Rt[t][i,i])))  for t in eachindex(sol.xt)]
+                return [Particles(Nsamples, Normal(sol.xt[t][i], sqrt(sol.Rt[t][i,i])))  for t in inds]
             end
         end
         i = findfirst(isequal(sym), prob.inputs)
@@ -190,29 +248,27 @@ function Base.getindex(osol::StateEstimationSolution, sym; dist=false, Nsamples:
     end
 
     if dist
-        g = ModelingToolkit.build_explicit_observed_function(prob.iosys, vcat(sym); prob.inputs, prob.disturbance_inputs)
+        g = EstimatedOutput(f, prob, vcat(sym))# ModelingToolkit.build_explicit_observed_function(prob.iosys, vcat(sym); prob.inputs, prob.disturbance_inputs)
         timevec = range(0, step=f.Ts, length=length(sol.xt))
-        return [propagate_distribution(g, f, SimpleMvNormal(sol.xt[i], sol.Rt[i]), sol.u[i], f.p, timevec[i]) for i in eachindex(sol.xt)]
+        return [g(SimpleMvNormal(sol.xt[i], sol.Rt[i]), sol.u[i], f.p, timevec[i]) for i in inds]
     end
-    g = ModelingToolkit.build_explicit_observed_function(prob.iosys, sym; prob.inputs, prob.disturbance_inputs)
+    g = EstimatedOutput(f, prob, sym) # ModelingToolkit.build_explicit_observed_function(prob.iosys, sym; prob.inputs, prob.disturbance_inputs)
     timevec = range(0, step=f.Ts, length=length(sol.xt))
     if Nsamples <= 1
-        [g(sol.xt[i], sol.u[i], f.p, timevec[i]) for i in eachindex(sol.xt)]
+        [g(sol.xt[i], sol.u[i], f.p, timevec[i]) for i in inds]
     else
-        [g(Particles(Nsamples, MvNormal(sol.xt[i], sol.Rt[i])), sol.u[i], f.p, timevec[i]) for i in eachindex(sol.xt)]
+        [g(Particles(Nsamples, MvNormal(sol.xt[i], sol.Rt[i])), sol.u[i], f.p, timevec[i]) for i in inds]
     end
 end
 
-@recipe function solplot(osol::StateEstimationSolution; prob = osol.prob, idxs=[prob.state; prob.outputs; prob.inputs], Nsamples=1, plotRt=true)
-    sol = osol.sol
-    timevec = sol.t
+@recipe function solplot(timevec, osol::StateEstimationSolution; prob = osol.prob, idxs=[prob.state; prob.outputs; prob.inputs], Nsamples=1, plotRt=true, σ=1.96)
     n = length(idxs)
     layout --> n
     if plotRt
         dists = osol[vcat(idxs), dist=true]
         y = [mean(d) for d in dists]
         R = [cov(d) for d in dists]
-        twoσ = 1.96 .* sqrt.(reduce(hcat, diag.(R))')
+        twoσ = σ .* sqrt.(reduce(hcat, diag.(R))')
     else
         y = osol[vcat(idxs), Nsamples=Nsamples]
     end
@@ -227,6 +283,12 @@ end
             timevec, getindex.(y, i)
         end
     end
+end
+
+@recipe function solplot(osol::StateEstimationSolution)
+    sol = osol.sol
+    timevec = sol.t
+    @series timevec, osol
 end
 
 
@@ -245,7 +307,7 @@ Propagate a probability distribution `dist` through a nonlinear function `f` usi
 function propagate_distribution(f, kf::ExtendedKalmanFilter, x, args...; kwargs...)
     hasproperty(x, :μ) || error("Expected x to be a MvNormal or SimpleMvNormal")
     m,S = mean(x), cov(x)
-    C = ForwardDiff.jacobian(m->f(m, args...; kwargs...), m)
+    C = ForwardDiff.jacobian(m->vcat(f(m, args...; kwargs...)), m) # vcat is a hack to ensure array output
     my = f(m, args...; kwargs...)
     Sy = C * S * C'
     return SimpleMvNormal(my, Sy)

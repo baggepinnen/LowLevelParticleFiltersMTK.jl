@@ -8,7 +8,7 @@ using Plots
 using StaticArrays
 using LinearAlgebra
 
-@testset "LowLevelParticleFiltersMTK.jl" begin
+# @testset "LowLevelParticleFiltersMTK.jl" begin
     t = ModelingToolkit.t_nounits
 D = ModelingToolkit.D_nounits
 
@@ -43,7 +43,7 @@ dg = SimpleMvNormal(R2)
 Ts = 0.1
 discretization = (f,Ts,ndiff,nalg,nu)->SeeToDee.Rk4(f, Ts)
 
-prob = StateEstimationProblem(model, inputs, outputs; disturbance_inputs, df, dg, discretization, Ts)
+prob = StateEstimationProblem(cmodel, inputs, outputs; disturbance_inputs, df, dg, discretization, Ts)
 ekf = get_filter(prob, ExtendedKalmanFilter)
 ukf = get_filter(prob, UnscentedKalmanFilter)
 
@@ -80,4 +80,4 @@ plot!(solu, idxs=cmodel.y^2 + 0.1*sin(cmodel.u))
 @test sole[cmodel.x] == sole[cmodel.y]
 
 
-end
+# end
