@@ -40,7 +40,7 @@ end
 
 
 """
-    StateEstimationProblem(model, inputs, outputs; disturbance_inputs, discretization, Ts, df, dg, x0map=[], pmap=[])
+    StateEstimationProblem(model, inputs, outputs; disturbance_inputs, discretization, Ts, df, dg, x0map=[], pmap=[], init=false)
 
 A structure representing a state-estimation problem.
 
@@ -56,6 +56,7 @@ A structure representing a state-estimation problem.
 - `x0map`: A dictionary mapping symbolic variables to their initial values. If a variable is not provided, it is assumed to be initialized to zero. The value can be a scalar number, in which case the covariance of the initial state is set to `σ0^2*I(nx)`, and the value can be a `Distributions.Normal`, in which case the provided distributions are used as the distribution of the initial state. When passing distributions, all state variables must be provided values.
 - `σ0`: The standard deviation of the initial state. This is used when `x0map` is not provided or when the values in `x0map` are scalars.
 - `pmap`: A dictionary mapping symbolic variables to their values. If a variable is not provided, it is assumed to be initialized to zero.
+- `init`: If `true`, the initial state is computed using an initialization problem. If `false`, the initial state is computed using the `get_u0` function.
 
 ## Usage:
 Pseudocode
@@ -67,7 +68,7 @@ sol       = StateEstimationSolution(filtersol, prob)   # Package into higher-lev
 plot(sol, idxs=[prob.state; prob.outputs; prob.inputs]) # Plot the solution
 ```
 """
-function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, discretization, Ts, df, dg, x0map=[], pmap=[], σ0 = 1e-4, kwargs...)
+function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, discretization, Ts, df, dg, x0map=[], pmap=[], σ0 = 1e-4, init=false, kwargs...)
 
     # We always generate two versions of the dynamics function, the difference between them is that one has a signature augmented with disturbance inputs w, f(x,u,p,t,w), and the other does not, f(x,u,p,t).
     # The particular filter used for estimation dictates which version of the dynamics function will be used.
@@ -110,12 +111,20 @@ function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, disc
 
     # Merge x0map and pmap into a single op mapping for InitializationProblem
     op = Dict(x0map)
-    merge!(op, pmap)
-    initprob = ModelingToolkit.InitializationProblem(iosys, 0.0, op)
-    initsol = solve(initprob, ModelingToolkit.FastShortcutNonlinearPolyalg())
+    inputmap = Dict([inputs .=> 0.0; disturbance_inputs .=> 0.0]) # Ensure inputs are initialized to zero if not provided
+    op = merge(inputmap, op, pmap)
 
-    p = Tuple(initprob.ps[p] for p in ps) # Use tuple instead of heterogeneously typed array for better performance
-    x0 = SVector{nx}(initsol[x_sym])
+    if init
+        initprob = ModelingToolkit.InitializationProblem(iosys, 0.0, op)
+        initsol = solve(initprob)
+        p = Tuple(initprob.ps[p] for p in ps) # Use tuple instead of heterogeneously typed array for better performance
+        x0 = SVector{nx}(initsol[x_sym])
+    else
+        x0 = SVector{nx}(ModelingToolkit.get_u0(iosys, op))
+        p0 = ModelingToolkit.get_p(iosys, op)
+        p = p0 isa AbstractVector ? tuple(p0...) : p0
+    end
+
     if dists
         d0 = SimpleMvNormal(x0, diagm([stdmap[Num(sym)]^2 for sym in x_sym]))
     else
