@@ -82,7 +82,7 @@ function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, disc
     nw = length(disturbance_inputs)
     na = count(ModelingToolkit.is_alg_equation, equations(iosys))
     x_inds = findall(ModelingToolkit.isdiffeq, equations(iosys))
-    a_inds = findall(ModelingToolkit.isalgeq, equations(iosys))
+    a_inds = findall(!ModelingToolkit.isdiffeq, equations(iosys))
 
     function f_cont(x,u,p,t)
         f[1].f_oop(x,u,p,t)
