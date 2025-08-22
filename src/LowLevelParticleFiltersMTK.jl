@@ -49,7 +49,7 @@ A structure representing a state-estimation problem.
 - `inputs`: The inputs to the dynamical system, a vector of symbolic variables that must be of type `@variables`.
 - `outputs`: The outputs of the dynamical system, a vector of symbolic variables that must be of type `@variables`.
 - `disturbance_inputs`: The disturbance inputs to the dynamical system, a vector of symbolic variables that must be of type `@variables`. These disturbance inputs indicate where dynamics noise ``w`` enters the system. The probability distribution ``d_f`` is defined over these variables.
-- `discretization`: A function `discretization(f_cont, Ts, x_inds, alg_inds, nu) = f_disc` that takes a continuous-tiem dynamics function `f_cont(x,u,p,t)` and returns a discrete-time dynamics function `f_disc(x,u,p,t)`. `x_inds` is the indices of differential state variables, `alg_inds` is the indices of algebraic variables, and `nu` is the number of inputs.
+- `discretization`: A function `discretization(f_cont, Ts, x_inds, alg_inds, nu) = f_disc` that takes a continuous-time dynamics function `f_cont(x,u,p,t)` and returns a discrete-time dynamics function `f_disc(x,u,p,t)`. `x_inds` is the indices of differential state variables, `alg_inds` is the indices of algebraic variables, and `nu` is the number of inputs.
 - `Ts`: The discretization time step.
 - `df`: The probability distribution of the dynamics noise ``w``. When using Kalman-type estimators, this must be a `MvNormal` or `SimpleMvNormal` distribution.
 - `dg`: The probability distribution of the measurement noise ``e``. When using Kalman-type estimators, this must be a `MvNormal` or `SimpleMvNormal` distribution.
@@ -243,13 +243,16 @@ function Base.getindex(osol::StateEstimationSolution, sym; dist=false, Nsamples:
     prob = osol.prob
     sol = osol.sol
     f = sol.f
+    smoothing = osol.sol isa LowLevelParticleFilters.KalmanSmoothingSolution
+    xt = smoothing ? sol.xT : sol.xt
+    Rt = smoothing ? sol.RT : sol.Rt
     if !dist
         i = findfirst(isequal(sym), prob.state)
         if i !== nothing
             if Nsamples <= 1
-                return getindex.(sol.xt, i)
+                return getindex.(xt, i)
             else
-                return [Particles(Nsamples, Normal(sol.xt[t][i], sqrt(sol.Rt[t][i,i])))  for t in inds]
+                return [Particles(Nsamples, Normal(xt[t][i], sqrt(Rt[t][i,i])))  for t in inds]
             end
         end
         i = findfirst(isequal(sym), prob.inputs)
@@ -260,22 +263,25 @@ function Base.getindex(osol::StateEstimationSolution, sym; dist=false, Nsamples:
 
     if dist
         g = EstimatedOutput(f, prob, vcat(sym))# ModelingToolkit.build_explicit_observed_function(prob.iosys, vcat(sym); prob.inputs, prob.disturbance_inputs)
-        timevec = range(0, step=f.Ts, length=length(sol.xt))
-        return [g(SimpleMvNormal(sol.xt[i], sol.Rt[i]), sol.u[i], f.p, timevec[i]) for i in inds]
+        timevec = range(0, step=f.Ts, length=length(xt))
+        return [g(SimpleMvNormal(xt[i], Rt[i]), sol.u[i], f.p, timevec[i]) for i in inds]
     end
     g = EstimatedOutput(f, prob, sym) # ModelingToolkit.build_explicit_observed_function(prob.iosys, sym; prob.inputs, prob.disturbance_inputs)
-    timevec = range(0, step=f.Ts, length=length(sol.xt))
+    timevec = range(0, step=f.Ts, length=length(xt))
     if Nsamples <= 1
-        [g(sol.xt[i], sol.u[i], f.p, timevec[i]) for i in inds]
+        [g(xt[i], sol.u[i], f.p, timevec[i]) for i in inds]
     else
-        [g(Particles(Nsamples, MvNormal(sol.xt[i], sol.Rt[i])), sol.u[i], f.p, timevec[i]) for i in inds]
+        [g(Particles(Nsamples, MvNormal(xt[i], Rt[i])), sol.u[i], f.p, timevec[i]) for i in inds]
     end
 end
 
-@recipe function solplot(timevec, osol::StateEstimationSolution; prob = osol.prob, idxs=[prob.state; prob.outputs; prob.inputs], Nsamples=1, plotRt=true, σ=1.96)
+@recipe function solplot(timevec, osol::StateEstimationSolution; prob = osol.prob, idxs=[prob.state; prob.outputs; prob.inputs], Nsamples=1, plotRt=true, σ=1.96, plotRT=true, plotxT=true)
     n = length(idxs)
     layout --> n
-    if plotRt
+    smoothing = osol.sol isa LowLevelParticleFilters.KalmanSmoothingSolution
+
+    plotconf = plotRt || (smoothing && plotRT)
+    if plotconf
         dists = osol[vcat(idxs), dist=true]
         y = [mean(d) for d in dists]
         R = [cov(d) for d in dists]
@@ -288,7 +294,7 @@ end
             label --> string(sym)
             sp --> i
             N --> 0 # This turns off particle paths for MCM plots
-            if plotRt
+            if plotconf
                 ribbon := twoσ[:,i]
             end
             timevec, getindex.(y, i)
