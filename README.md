@@ -93,8 +93,8 @@ df = SimpleMvNormal(R1)         # Dynamics noise distribution. This has to be a 
 dg = SimpleMvNormal(R2)         # Measurement noise distribution. This has to be a Gaussian if using a Kalman-type filter
 
 Ts = 0.1                        # Sampling interval
-discretization = function (f,Ts,ndiff,nalg,nu)
-  iszero(nalg) || error("Rk4 only handles differential equations, consider `Trapezoidal` instead")
+discretization = function (f,Ts,x_inds,alg_inds,nu)
+  isempty(alg_inds) || error("Rk4 only handles differential equations, consider `Trapezoidal` instead")
   SeeToDee.Rk4(f, Ts) # Discretization method
 end
 
@@ -162,7 +162,7 @@ A structure representing a state-estimation problem.
   * `inputs`: The inputs to the dynamical system, a vector of symbolic variables that must be of type `@variables`.
   * `outputs`: The outputs of the dynamical system, a vector of symbolic variables that must be of type `@variables`.
   * `disturbance_inputs`: The disturbance inputs to the dynamical system, a vector of symbolic variables that must be of type `@variables`. These disturbance inputs indicate where dynamics noise $w$ enters the system. The probability distribution $d_f$ is defined over these variables.
-  * `discretization`: A function `discretization(f_cont, Ts, ndiff, nalg, nu) = f_disc` that takes a continuous-tiem dynamics function `f_cont(x,u,p,t)` and returns a discrete-time dynamics function `f_disc(x,u,p,t)`. `ndiff` is the number of differential state variables, `nalg` is the number of algebraic variables, and `nu` is the number of inputs.
+  * `discretization`: A function `discretization(f_cont, Ts, x_inds, alg_inds, nu) = f_disc` that takes a continuous-tiem dynamics function `f_cont(x,u,p,t)` and returns a discrete-time dynamics function `f_disc(x,u,p,t)`. `x_inds` is the indices of differential state variables, `alg_inds` is the indices of algebraic variables, and `nu` is the number of inputs.
   * `Ts`: The discretization time step.
   * `df`: The probability distribution of the dynamics noise $w$. When using Kalman-type estimators, this must be a `MvNormal` or `SimpleMvNormal` distribution.
   * `dg`: The probability distribution of the measurement noise $e$. When using Kalman-type estimators, this must be a `MvNormal` or `SimpleMvNormal` distribution.

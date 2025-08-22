@@ -49,7 +49,7 @@ A structure representing a state-estimation problem.
 - `inputs`: The inputs to the dynamical system, a vector of symbolic variables that must be of type `@variables`.
 - `outputs`: The outputs of the dynamical system, a vector of symbolic variables that must be of type `@variables`.
 - `disturbance_inputs`: The disturbance inputs to the dynamical system, a vector of symbolic variables that must be of type `@variables`. These disturbance inputs indicate where dynamics noise ``w`` enters the system. The probability distribution ``d_f`` is defined over these variables.
-- `discretization`: A function `discretization(f_cont, Ts, ndiff, nalg, nu) = f_disc` that takes a continuous-tiem dynamics function `f_cont(x,u,p,t)` and returns a discrete-time dynamics function `f_disc(x,u,p,t)`. `ndiff` is the number of differential state variables, `nalg` is the number of algebraic variables, and `nu` is the number of inputs.
+- `discretization`: A function `discretization(f_cont, Ts, x_inds, alg_inds, nu) = f_disc` that takes a continuous-tiem dynamics function `f_cont(x,u,p,t)` and returns a discrete-time dynamics function `f_disc(x,u,p,t)`. `x_inds` is the indices of differential state variables, `alg_inds` is the indices of algebraic variables, and `nu` is the number of inputs.
 - `Ts`: The discretization time step.
 - `df`: The probability distribution of the dynamics noise ``w``. When using Kalman-type estimators, this must be a `MvNormal` or `SimpleMvNormal` distribution.
 - `dg`: The probability distribution of the measurement noise ``e``. When using Kalman-type estimators, this must be a `MvNormal` or `SimpleMvNormal` distribution.
@@ -81,6 +81,8 @@ function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, disc
     nu = length(inputs)
     nw = length(disturbance_inputs)
     na = count(ModelingToolkit.is_alg_equation, equations(iosys))
+    x_inds = findall(ModelingToolkit.isdiffeq, equations(iosys))
+    a_inds = findall(!ModelingToolkit.isdiffeq, equations(iosys))
 
     function f_cont(x,u,p,t)
         f[1].f_oop(x,u,p,t)
@@ -90,7 +92,7 @@ function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, disc
         f_aug[1].f_oop(x,u,p,t,w)
     end
 
-    f_disc = discretization(f_cont, Ts, nx-na, na, nu)
+    f_disc = discretization(f_cont, Ts, x_inds, a_inds, nu)
 
     g = build_explicit_observed_function(iosys, outputs; inputs, ps, disturbance_inputs, disturbance_argument=false, checkbounds=true)
 

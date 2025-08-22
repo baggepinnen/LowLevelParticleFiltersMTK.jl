@@ -41,7 +41,7 @@ df = SimpleMvNormal(R1)
 dg = SimpleMvNormal(R2)
 
 Ts = 0.1
-discretization = (f,Ts,ndiff,nalg,nu)->SeeToDee.Rk4(f, Ts)
+discretization = (f,Ts,x_inds,a_inds,nu)->SeeToDee.Rk4(f, Ts)
 
 prob = StateEstimationProblem(cmodel, inputs, outputs; disturbance_inputs, df, dg, discretization, Ts)
 ekf = get_filter(prob, ExtendedKalmanFilter)
