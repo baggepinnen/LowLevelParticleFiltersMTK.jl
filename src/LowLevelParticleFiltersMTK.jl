@@ -68,7 +68,7 @@ sol       = StateEstimationSolution(filtersol, prob)   # Package into higher-lev
 plot(sol, idxs=[prob.state; prob.outputs; prob.inputs]) # Plot the solution
 ```
 """
-function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, discretization, Ts, df, dg, x0map=[], pmap=[], σ0 = 1e-4, init=false, kwargs...)
+function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, discretization, Ts, df, dg, x0map=[], pmap=[], σ0 = 1e-4, init=false, static=true, kwargs...)
 
     # We always generate two versions of the dynamics function, the difference between them is that one has a signature augmented with disturbance inputs w, f(x,u,p,t,w), and the other does not, f(x,u,p,t).
     # The particular filter used for estimation dictates which version of the dynamics function will be used.
@@ -84,13 +84,7 @@ function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, disc
     x_inds = findall(ModelingToolkit.isdiffeq, equations(iosys))
     a_inds = findall(!ModelingToolkit.isdiffeq, equations(iosys))
 
-    function f_cont(x,u,p,t)
-        f[1].f_oop(x,u,p,t)
-    end
-
-    function f_cont(x,u,p,t,w)
-        f_aug[1].f_oop(x,u,p,t,w)
-    end
+    f_cont = FCont(f[1].f_oop, f_aug[1].f_oop)
 
     f_disc = discretization(f_cont, Ts, x_inds, a_inds, nu)
 
@@ -128,9 +122,11 @@ function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, disc
     end
 
     if dists
-        d0 = SimpleMvNormal(x0, diagm([stdmap[Num(sym)]^2 for sym in x_sym]))
+        R_mat = diagm([stdmap[Num(sym)]^2 for sym in x_sym])
+        d0 = SimpleMvNormal(static ? x0 : Vector(x0), static ? SMatrix{nx,nx}(R_mat) : R_mat)
     else
-        d0 = SimpleMvNormal(x0, σ0^2*I(nx))
+        R_mat = σ0^2*I(nx)
+        d0 = SimpleMvNormal(static ? x0 : Vector(x0), static ? SMatrix{nx,nx}(R_mat) : Matrix(R_mat))
     end
 
     names = SignalNames(x = string.(x_sym), u = string.(inputs), y = string.(outputs), name = "")
@@ -138,7 +134,12 @@ function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, disc
     StateEstimationProblem(model, iosys, inputs, outputs, disturbance_inputs, x_sym, nx, nu, ny, nw, na, f_disc, g.f_oop, ps, p, df, dg, d0, Ts, names)
 end
 
-
+struct FCont{F,FA}
+    f::F
+    fa::FA
+end
+(f::FCont)(x,u,p,t) = f.f(x,u,p,t)
+(f::FCont)(x,u,p,t,w) = f.fa(x,u,p,t,w)
 
 
 """
