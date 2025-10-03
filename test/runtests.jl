@@ -79,5 +79,34 @@ plot!(solu, idxs=cmodel.y^2 + 0.1*sin(cmodel.u))
 ##
 @test sole[cmodel.x] == sole[cmodel.y]
 
+## Test static keyword argument
+@testset "static keyword argument" begin
+    # Test default behavior (static=true)
+    prob_static = StateEstimationProblem(cmodel, inputs, outputs; disturbance_inputs, df, dg, discretization, Ts, static=true)
+    @test prob_static.d0.μ isa SVector
+    @test prob_static.d0.Σ isa SMatrix
+
+    # Test with static=false
+    prob_dynamic = StateEstimationProblem(cmodel, inputs, outputs; disturbance_inputs, df, dg, discretization, Ts, static=false)
+    @test prob_dynamic.d0.μ isa Vector
+    @test prob_dynamic.d0.Σ isa Matrix
+
+    # Test backward compatibility (default should be static=true)
+    prob_default = StateEstimationProblem(cmodel, inputs, outputs; disturbance_inputs, df, dg, discretization, Ts)
+    @test prob_default.d0.μ isa SVector
+    @test prob_default.d0.Σ isa SMatrix
+
+    # Verify filters work with both array types
+    ekf_static = get_filter(prob_static, ExtendedKalmanFilter)
+    ekf_dynamic = get_filter(prob_dynamic, ExtendedKalmanFilter)
+
+    # Test that both filters can process the same data
+    fsole_static = forward_trajectory(ekf_static, u, y)
+    fsole_dynamic = forward_trajectory(ekf_dynamic, u, y)
+
+    # Results should be approximately equal regardless of array type
+    @test fsole_static.xt[end] ≈ fsole_dynamic.xt[end]
+    @test fsole_static.Rt[end] ≈ fsole_dynamic.Rt[end]
+end
 
 # end
