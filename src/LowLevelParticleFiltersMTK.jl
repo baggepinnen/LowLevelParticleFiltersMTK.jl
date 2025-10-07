@@ -68,13 +68,13 @@ sol       = StateEstimationSolution(filtersol, prob)   # Package into higher-lev
 plot(sol, idxs=[prob.state; prob.outputs; prob.inputs]) # Plot the solution
 ```
 """
-function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, discretization, Ts, df, dg, x0map=[], pmap=[], σ0 = 1e-4, init=false, static=true, kwargs...)
+function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, discretization, Ts, df, dg, x0map=[], pmap=[], σ0 = 1e-4, init=false, static=true, split = false, simplify=true, force_SA=true, kwargs...)
 
     # We always generate two versions of the dynamics function, the difference between them is that one has a signature augmented with disturbance inputs w, f(x,u,p,t,w), and the other does not, f(x,u,p,t).
     # The particular filter used for estimation dictates which version of the dynamics function will be used.
-    model = mtkcompile(model; inputs, outputs, disturbance_inputs, simplify = true, split = false)
-    f, x_sym, ps, iosys = generate_control_function(model, inputs, disturbance_inputs; simplify = true, split=false, force_SA=true, disturbance_argument=false, kwargs...);
-    f_aug, _ = generate_control_function(model, inputs, disturbance_inputs; simplify = true, split=false, force_SA=true, disturbance_argument=true, kwargs...);
+    model = mtkcompile(model; inputs, outputs, disturbance_inputs, simplify, split, kwargs...)
+    f, x_sym, ps, iosys = generate_control_function(model, inputs, disturbance_inputs; simplify, split, force_SA, disturbance_argument=false, kwargs...);
+    f_aug, _ = generate_control_function(model, inputs, disturbance_inputs; simplify, split, force_SA, disturbance_argument=true, kwargs...);
 
     nx = length(x_sym)
     ny = length(outputs)
@@ -109,7 +109,6 @@ function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, disc
     op = Dict(x0map)
     inputmap = Dict([inputs .=> 0.0; disturbance_inputs .=> 0.0]) # Ensure inputs are initialized to zero if not provided
     op = merge(inputmap, op, pmap)
-
     if init
         initprob = ModelingToolkit.InitializationProblem(iosys, 0.0, op)
         initsol = solve(initprob)
