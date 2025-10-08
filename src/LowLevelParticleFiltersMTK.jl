@@ -57,6 +57,7 @@ A structure representing a state-estimation problem.
 - `σ0`: The standard deviation of the initial state. This is used when `x0map` is not provided or when the values in `x0map` are scalars.
 - `pmap`: A dictionary mapping symbolic variables to their values. If a variable is not provided, it is assumed to be initialized to zero.
 - `init`: If `true`, the initial state is computed using an initialization problem. If `false`, the initial state is computed using the `get_u0` function.
+- `xscalemap`: A dictionary mapping state variables to scaling factors. This is used to scale the state variables during integration to improve numerical stability. If a variable is not provided, it is assumed to have a scaling factor of 1.0. If provided, `discretization` is a function with signature `discretization(f_cont, Ts, x_inds, alg_inds, nu, scale_x)` where `scale_x` is a vector of scaling factors for the state variables.
 
 ## Usage:
 Pseudocode
@@ -68,7 +69,7 @@ sol       = StateEstimationSolution(filtersol, prob)   # Package into higher-lev
 plot(sol, idxs=[prob.state; prob.outputs; prob.inputs]) # Plot the solution
 ```
 """
-function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, discretization, Ts, df, dg, x0map=[], pmap=[], σ0 = 1e-4, init=false, static=true, split = false, simplify=true, force_SA=true, kwargs...)
+function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, discretization, Ts, df, dg, x0map=[], pmap=[], σ0 = 1e-4, init=false, static=true, split = false, simplify=true, force_SA=true, xscalemap = nothing, kwargs...)
 
     # We always generate two versions of the dynamics function, the difference between them is that one has a signature augmented with disturbance inputs w, f(x,u,p,t,w), and the other does not, f(x,u,p,t).
     # The particular filter used for estimation dictates which version of the dynamics function will be used.
@@ -86,7 +87,6 @@ function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, disc
 
     f_cont = FCont(f[1].f_oop, f_aug[1].f_oop)
 
-    f_disc = discretization(f_cont, Ts, x_inds, a_inds, nu)
 
     g = build_explicit_observed_function(iosys, outputs; inputs, ps, disturbance_inputs, disturbance_argument=false, checkbounds=true)
 
@@ -126,6 +126,16 @@ function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, disc
     else
         R_mat = σ0^2*I(nx)
         d0 = SimpleMvNormal(static ? x0 : Vector(x0), static ? SMatrix{nx,nx}(R_mat) : Matrix(R_mat))
+    end
+
+    if xscalemap !== nothing
+        scale_x = map(unknowns(iosys)) do sym
+            abs(get(xscalemap, sym, 1.0))
+        end
+        f_disc = discretization(f_cont, Ts, x_inds, a_inds, nu, scale_x)
+    else
+        f_disc = discretization(f_cont, Ts, x_inds, a_inds, nu)
+
     end
 
     names = SignalNames(x = string.(x_sym), u = string.(inputs), y = string.(outputs), name = "")
