@@ -149,9 +149,68 @@ The following is a summary of the exported functions, followed by their docstrin
 - `propagate_distribution`: Propagate a probability distribution `dist` through a nonlinear function `f` using the covariance-propagation method of filter `kf`.
 
 
-# `StateEstimationProblem`
+# `EstimatedOutput`
 ```
-StateEstimationProblem(model, inputs, outputs; disturbance_inputs, discretization, Ts, df, dg, d0)
+EstimatedOutput(kf, prob, sym)
+```
+
+Create an output function that can be called like
+
+```julia
+g(x::Vector,    u, p, t)     # Compute an output
+g(xR::MvNormal, u, p, t)     # Compute an output distribution given input distribution xR
+g(kf,           u, p, t)     # Compute an output distribution given the current state of an AbstractKalmanFilter
+```
+
+## Arguments:
+
+  * `kf`: A Kalman type filter
+  * `prob`: A `StateEstimationProblem` object
+  * `sym`: A symbolic expression or vector of symbolic expressions that the function should output.
+
+# `KalmanFilter`
+```julia
+kf, x_sym, ps, iosys = KalmanFilter(model::System, inputs, outputs; disturbance_inputs, Ts, R1, R2, x0map=[], pmap=[], σ0 = 1e-4, init=false, static=true, split = true, simplify=true, discretize = true, parametric = false, kwargs...)
+```
+
+Construct a Kalman filter for a linear MTK ODESystem. No check is performed to verify that the system is truly linear, if it is nonlinear, it will be linearized.
+
+## Returns:
+
+  * `kf`: A Kalman filter. If `parametric=true`, the `A,B,C,D,R1,R2` fields are all functions of `(x,u,p,t)`, otherwise they are matrices that are evaluated at the `x0map, pmap` values.
+  * `x_sym`: The symbolic state variables of the system.
+  * `ps`: The symbolic parameters of the system.
+  * `iosys`: The simplified MTK `System`
+
+## Arguments:
+
+  * `model`: An MTK System model, this model must not have undergone structural simplification.
+  * `inputs`: The inputs to the dynamical system, a vector of symbolic variables.
+  * `outputs`: The outputs of the dynamical system, a vector of symbolic variables.
+  * `disturbance_inputs`: The disturbance inputs to the dynamical system, a vector of symbolic variables. These disturbance inputs indicate where dynamics noise $w$ enters the system. The probability distribution $R1$ is defined over these variables.
+  * `Ts`: The discretization time step.
+  * `R1`: The covariance matrix of the dynamics noise $w$.
+  * `R2`: The covariance matrix of the measurement noise $e$.
+  * `x0map`: A dictionary mapping symbolic variables to their initial values. If a variable is not provided, it is assumed to be initialized to zero.  The value can be a scalar number, in which case the covariance of the initial state is set to `σ0^2*I(nx)`, and the value can be a `Distributions.Normal`, in which case the provided distributions are used as the distribution of the initial state. When passing distributions, all state variables must be provided values.
+  * `pmap`: A dictionary mapping symbolic variables to their values.
+  * `σ0`: The standard deviation of the initial state. This is used when `x0map` is not provided.
+  * `init`: If `true`, the initial state is computed using an initialization problem. If `false`, the initial state is computed using the `get_u0` function.
+  * `static`: If `true`, static arrays are used for the state and covariance matrix. This can improve performance for small systems.
+  * `split`: Passed to `mtkcompile`, see the documentation there.
+  * `simplify`: Passed to `mtkcompile`, see the documentation there.
+  * `discretize`: If `true`, the system is discretized using zero-order hold. If `false`, matrices/functions are generated for the continuous-time system, in which case the user must handle discretization themselves (filtering with a continuous-time system without discretization will yield nonsensical results).
+  * `parametric`: If `true`, the `A,B,C,D,R1,R2` fields of the returned filter are functions of `(x,u,p,t)`, otherwise they are matrices that are evaluated at the `x0map, pmap` values.
+  * `kwargs`: Additional keyword arguments passed to `mtkcompile`.
+
+```
+KalmanFilter(sys::StateSpace{Discrete}, R1, R2, d0 = MvNormal(Matrix(R1)); kwargs...)
+```
+
+Construct a `KalmanFilter` from a predefined `StateSpace` system from ControlSystems.jl
+
+# `StateEstimationProblem`
+```julia
+StateEstimationProblem(model, inputs, outputs; disturbance_inputs, discretization, Ts, df, dg, x0map=[], pmap=[], init=false)
 ```
 
 A structure representing a state-estimation problem.
@@ -162,11 +221,15 @@ A structure representing a state-estimation problem.
   * `inputs`: The inputs to the dynamical system, a vector of symbolic variables that must be of type `@variables`.
   * `outputs`: The outputs of the dynamical system, a vector of symbolic variables that must be of type `@variables`.
   * `disturbance_inputs`: The disturbance inputs to the dynamical system, a vector of symbolic variables that must be of type `@variables`. These disturbance inputs indicate where dynamics noise $w$ enters the system. The probability distribution $d_f$ is defined over these variables.
-  * `discretization`: A function `discretization(f_cont, Ts, x_inds, alg_inds, nu) = f_disc` that takes a continuous-tiem dynamics function `f_cont(x,u,p,t)` and returns a discrete-time dynamics function `f_disc(x,u,p,t)`. `x_inds` is the indices of differential state variables, `alg_inds` is the indices of algebraic variables, and `nu` is the number of inputs.
+  * `discretization`: A function `discretization(f_cont, Ts, x_inds, alg_inds, nu) = f_disc` that takes a continuous-time dynamics function `f_cont(x,u,p,t)` and returns a discrete-time dynamics function `f_disc(x,u,p,t)`. `x_inds` is the indices of differential state variables, `alg_inds` is the indices of algebraic variables, and `nu` is the number of inputs.
   * `Ts`: The discretization time step.
   * `df`: The probability distribution of the dynamics noise $w$. When using Kalman-type estimators, this must be a `MvNormal` or `SimpleMvNormal` distribution.
   * `dg`: The probability distribution of the measurement noise $e$. When using Kalman-type estimators, this must be a `MvNormal` or `SimpleMvNormal` distribution.
-  * `d0`: The probability distribution of the initial state $x_0$. When using Kalman-type estimators, this must be a `MvNormal` or `SimpleMvNormal` distribution.
+  * `x0map`: A dictionary mapping symbolic variables to their initial values. If a variable is not provided, it is assumed to be initialized to zero. The value can be a scalar number, in which case the covariance of the initial state is set to `σ0^2*I(nx)`, and the value can be a `Distributions.Normal`, in which case the provided distributions are used as the distribution of the initial state. When passing distributions, all state variables must be provided values.
+  * `σ0`: The standard deviation of the initial state. This is used when `x0map` is not provided or when the values in `x0map` are scalars.
+  * `pmap`: A dictionary mapping symbolic variables to their values. If a variable is not provided, it is assumed to be initialized to zero.
+  * `init`: If `true`, the initial state is computed using an initialization problem. If `false`, the initial state is computed using the `get_u0` function.
+  * `xscalemap`: A dictionary mapping state variables to scaling factors. This is used to scale the state variables during integration to improve numerical stability. If a variable is not provided, it is assumed to have a scaling factor of 1.0. If provided, `discretization` is a function with signature `discretization(f_cont, Ts, x_inds, alg_inds, nu, scale_x)` where `scale_x` is a vector of scaling factors for the state variables.
 
 ## Usage:
 
@@ -182,7 +245,7 @@ plot(sol, idxs=[prob.state; prob.outputs; prob.inputs]) # Plot the solution
 
 # `StateEstimationSolution`
 ```julia
-StateEstimationSolution(sol::KalmanFilteringSolution, prob::StateEstimationProblem)
+StateEstimationSolution(kfsol, prob)
 ```
 
 A solution object that provides symbolic indexing to a `KalmanFilteringSolution` object.

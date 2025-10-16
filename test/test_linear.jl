@@ -42,13 +42,22 @@ R2 = SMatrix{ny,ny}(0.1I(ny))
 
 Ts = 0.1
 
-kf = KalmanFilter(cmodel, inputs, outputs; disturbance_inputs, R1, R2, Ts, split=false)
+for parametric = (true, false), discretize = (true, false), split = (false)
+    
+    kf, x_sym, ps, iosys = KalmanFilter(cmodel, inputs, outputs; disturbance_inputs, R1, R2, Ts, split, parametric=false, discretize=true)
+    @test kf.Ts == Ts
 
-u = [randn(1) for _ in 1:100]
-x,u,y = simulate(kf, u, dynamics_noise=true, measurement_noise=true)
+    u = [randn(1) for _ in 1:100]
+    x,u,y = simulate(kf, u, dynamics_noise=true, measurement_noise=true)
 
 
-fsole = forward_trajectory(kf, u, y)
+    fsole = forward_trajectory(kf, u, y)
+    if discretize # result is nonsense if not discretized, so we just test that it runs
+        @test sum(abs2, reduce(hcat, x .- fsole.xt)) / 100 < 0.1
+    end
+end
+
+
 
 using Plots
 plot(fsole, size=(1000, 1000))
@@ -56,4 +65,3 @@ plot!(fsole.t, reduce(hcat, x)')
 
 
 
-norm(reduce(hcat, x .- fsole.xt))
