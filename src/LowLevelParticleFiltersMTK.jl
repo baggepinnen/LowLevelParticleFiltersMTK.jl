@@ -352,4 +352,98 @@ end
 
 
 
+# ==============================================================================
+## Linear systems
+# ==============================================================================
+
+function LowLevelParticleFilters.KalmanFilter(model::System, inputs, outputs; disturbance_inputs, Ts, R1, R2, x0map=[], pmap=[], σ0 = 1e-4, init=false, static=true, split = true, simplify=true, force_SA = true, kwargs...)
+
+    # We always generate two versions of the dynamics function, the difference between them is that one has a signature augmented with disturbance inputs w, f(x,u,p,t,w), and the other does not, f(x,u,p,t).
+    # The particular filter used for estimation dictates which version of the dynamics function will be used.
+    all_inputs = [inputs; disturbance_inputs]
+
+    (; A, B, C, D), iosys = ModelingToolkit.linearize_symbolic(model, all_inputs, outputs; simplify = false, allow_input_derivatives = false, split, kwargs...)
+    @show A,B,C,D
+    BBw = B
+    DDw = D
+    B = BBw[:, 1:length(inputs)]
+    Bw = BBw[:, length(inputs)+1:end]
+    D = DDw[:, 1:length(inputs)]
+    Dw = DDw[:, length(inputs)+1:end]
+    ps = setdiff(parameters(iosys), inputs, disturbance_inputs)
+    x_sym = unknowns(iosys)
+
+    nx = length(x_sym)
+    ny = length(outputs)
+    nu = length(inputs)
+    nw = length(disturbance_inputs)
+    na = count(ModelingToolkit.is_alg_equation, equations(iosys))
+    na == 0 || error("KalmanFilter only supports ODE systems, found $na algebraic equations.")
+
+    # Handle initial distribution
+    pmap = merge(Dict(disturbance_inputs .=> 0.0), Dict(pmap)) # Make sure disturbance inputs are initialized to zero if they are not explicitly provided in pmap
+    x0map = collect(x0map)
+    if !isempty(x0map) && (x0map[1][2] isa Distribution)
+        stdmap = map(collect(x0map)) do (sym, dist)
+            sym => dist.σ
+        end |> Dict
+        x0map = map(collect(x0map)) do (sym, dist)
+            sym => dist.μ
+        end
+        dists = true
+    else
+        dists = false
+    end
+
+    # Merge x0map and pmap into a single op mapping for InitializationProblem
+    op = Dict(x0map)
+    inputmap = Dict([inputs .=> 0.0; disturbance_inputs .=> 0.0]) # Ensure inputs are initialized to zero if not provided
+    op = merge(inputmap, op, pmap)
+    if init
+        initprob = ModelingToolkit.InitializationProblem(iosys, 0.0, op)
+        initsol = solve(initprob)
+        p = Tuple(initprob.ps[p] for p in ps) # Use tuple instead of heterogeneously typed array for better performance
+        x0 = SVector{nx}(initsol[x_sym])
+    else
+        x0 = SVector{nx}(ModelingToolkit.get_u0(iosys, op))
+        p0 = ModelingToolkit.get_p(iosys, op)
+        p = p0 isa AbstractVector ? tuple(p0...) : p0
+    end
+
+    if dists
+        R_mat = diagm([stdmap[Num(sym)]^2 for sym in x_sym])
+        d0 = SimpleMvNormal(static ? x0 : Vector(x0), static ? SMatrix{nx,nx}(R_mat) : R_mat)
+    else
+        R_mat = σ0^2*I(nx)
+        d0 = SimpleMvNormal(static ? x0 : Vector(x0), static ? SMatrix{nx,nx}(R_mat) : Matrix(R_mat))
+    end
+
+    names = SignalNames(x = string.(x_sym), u = string.(inputs), y = string.(outputs), name = string(nameof(model)))
+
+    # build functions
+    Afun = Symbolics.build_function(A, ps; force_SA, expression=Val{false})[1]
+    Bfun = Symbolics.build_function(B, ps; force_SA, expression=Val{false})[1]
+    Cfun = Symbolics.build_function(C, ps; force_SA, expression=Val{false})[1]
+    Dfun = Symbolics.build_function(D, ps; force_SA, expression=Val{false})[1]
+    Bwfun = Symbolics.build_function(Bw, ps; force_SA, expression=Val{false})[1]
+    Dwfun = Symbolics.build_function(Dw, ps; force_SA, expression=Val{false})[1]
+
+    R1fun, R2fun = let R1=R1, R2=R2
+        R1fun = function (x,u,p,t)
+            Bwi = Bwfun(p)
+            Bwi * R1 * Bwi'
+        end
+        R2fun = function (x,u,p,t)
+            Dwi = Dwfun(p)
+            Dwi * R2 * Dwi'
+        end
+        R1fun, R2fun
+    end
+
+    KalmanFilter(Afun, Bfun, Cfun, Dfun, R1fun, R2fun, d0; Ts, nu, ny, nx, p, names)
+
+
+end
+    
+
 end
