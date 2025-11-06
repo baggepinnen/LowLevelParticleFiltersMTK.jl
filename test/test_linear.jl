@@ -11,20 +11,24 @@ using LinearAlgebra
 t = ModelingToolkit.t_nounits
 D = ModelingToolkit.D_nounits
 
-@mtkmodel SimpleSys begin
-    @variables begin
+@component function SimpleSys(; name)
+    pars = @parameters begin
+        a = 1.0
+    end
+
+    vars = @variables begin
         x(t) = 0
         u(t) = 0
         y(t)
         w(t), [disturbance = true, input = true]
     end
-    @parameters begin
-        a = 1.0
-    end
-    @equations begin
+
+    equations = [
         D(x) ~ -a*x + u + w # Explicitly encode where dynamics noise enters the system with w
         y ~ x
-    end
+    ]
+
+    return ODESystem(equations, t; name)
 end
 
 @named model = SimpleSys()
