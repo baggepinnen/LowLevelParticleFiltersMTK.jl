@@ -11,8 +11,9 @@ using LinearAlgebra, Statistics
 using StaticArrays
 using RecipesBase
 using ModelingToolkit: generate_control_function, build_explicit_observed_function
+import ModelingToolkit: parameters
 
-export StateEstimationProblem, StateEstimationSolution, get_filter, propagate_distribution, EstimatedOutput
+export StateEstimationProblem, StateEstimationSolution, get_filter, propagate_distribution, EstimatedOutput, parameters
 
 struct StateEstimationProblem
     model
@@ -176,6 +177,8 @@ end
 function get_filter(prob::StateEstimationProblem, ::Type{UnscentedKalmanFilter}; kwargs...)
     UnscentedKalmanFilter{false,false,true,false}(prob.f, prob.g, prob.df.Σ, prob.dg.Σ, prob.d0; prob.Ts, prob.nu, prob.ny, prob.nx, prob.p, names = SignalNames(prob.names, "UKF"), kwargs...)
 end
+
+ModelingToolkit.parameters(f::AbstractKalmanFilter) = LowLevelParticleFilters.parameters(f)
 
 
 """
