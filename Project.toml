@@ -1,7 +1,7 @@
 name = "LowLevelParticleFiltersMTK"
 uuid = "6906b499-63f5-4dd8-acfd-28b0f8b24f7d"
 authors = ["Fredrik Bagge Carlson"]
-version = "0.2.5"
+version = "0.2.6"
 
 [deps]
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
