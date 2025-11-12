@@ -46,13 +46,20 @@ R2 = SMatrix{ny,ny}(0.1I(ny))
 
 Ts = 0.1
 
-for parametric = (true, false), discretize = (true, false), split = (false)
+for parametricA = (true, ),
+    parametricB = (true, false),
+    parametricC = (true, false),
+    parametricD = (true, false),
+    parametricR1 = (true, false),
+    parametricR2 = (true, false),
+    discretize = (true, false), split = (false)
     
-    kf, x_sym, ps, iosys = KalmanFilter(cmodel, inputs, outputs; disturbance_inputs, R1, R2, Ts, split, parametric=false, discretize=true)
+    kf, x_sym, ps, iosys = KalmanFilter(cmodel, inputs, outputs; disturbance_inputs, R1, R2, Ts, split,
+    parametricA, parametricB, parametricC, parametricD, parametricR1, parametricR2, discretize)
     @test kf.Ts == Ts
 
     u = [randn(1) for _ in 1:100]
-    x,u,y = simulate(kf, u, dynamics_noise=true, measurement_noise=true)
+    x,u,y = simulate(kf, u, dynamics_noise=true, measurement_noise=true, sample_initial=true)
 
 
     fsole = forward_trajectory(kf, u, y)

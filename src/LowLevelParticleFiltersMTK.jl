@@ -14,6 +14,7 @@ using ModelingToolkit: generate_control_function, build_explicit_observed_functi
 
 export StateEstimationProblem, StateEstimationSolution, get_filter, propagate_distribution, EstimatedOutput
 
+ModelingToolkit.parameters(f::LowLevelParticleFilters.AbstractFilter) = LowLevelParticleFilters.parameters(f)
 
 struct StateEstimationProblem
     model
@@ -361,11 +362,15 @@ function has_vars(exprs)
     return false
 end
 
+@register_array_symbolic Base.exp(x::AbstractMatrix) begin
+    size=size(x)
+end
+
 # ==============================================================================
 ## Linear systems
 # ==============================================================================
 """
-    kf, x_sym, ps, iosys, mats = KalmanFilter(model::System, inputs, outputs; disturbance_inputs, Ts, R1, R2, x0map=[], pmap=[], σ0 = 1e-4, init=false, static=true, split = true, simplify=true, discretize = true, parametric = false, kwargs...)
+    kf, x_sym, ps, iosys, mats, prob = KalmanFilter(model::System, inputs, outputs; disturbance_inputs, Ts, R1, R2, x0map=[], pmap=[], σ0 = 1e-4, init=false, static=true, split = true, simplify=true, discretize = true, parametric = false, kwargs...)
 
 Construct a Kalman filter for a linear MTK ODESystem. No check is performed to verify that the system is truly linear, if it is nonlinear, it will be linearized.
 
@@ -374,6 +379,8 @@ Construct a Kalman filter for a linear MTK ODESystem. No check is performed to v
 - `x_sym`: The symbolic state variables of the system.
 - `ps`: The symbolic parameters of the system.
 - `iosys`: The simplified MTK `System`
+- `mats`: A named tuple containing the symbolic system matrices `(A,B,C,D,Bw,Dw)`, where `Bw` and `Dw` are the input matrices corresponding to the disturbance inputs.
+- `prob`: A `StateEstimationProblem` object. This problem object does not play quite the same role as when using Unscented or Extended Kalman filters since the filter is created already by this constructor, but the problem object can still be useful for inspecting the simplified MTK system, to create `EstimatedOutput` objects and to make use of the symbolic indexing functionality.
 
 ## Arguments:
 - `model`: An MTK System model, this model must not have undergone structural simplification.
@@ -391,7 +398,13 @@ Construct a Kalman filter for a linear MTK ODESystem. No check is performed to v
 - `split`: Passed to `mtkcompile`, see the documentation there.
 - `simplify`: Passed to `mtkcompile`, see the documentation there.
 - `discretize`: If `true`, the system is discretized using zero-order hold. If `false`, matrices/functions are generated for the continuous-time system, in which case the user must handle discretization themselves (filtering with a continuous-time system without discretization will yield nonsensical results).
-- `parametric`: If `true`, the `A,B,C,D,R1,R2` fields of the returned filter are functions of `(x,u,p,t)`, otherwise they are matrices that are evaluated at the `x0map, pmap` values.
+- `parametric_A`: If `true`, the `A` field of the returned filter is a function of `(x,u,p,t)`, otherwise it is a matrix that is evaluated at the `x0map, pmap` values.
+- `parametric_B`: If `true`, the `B` field of the returned filter is a function of `(x,u,p,t)`, otherwise it is a matrix that is evaluated at the `x0map, pmap` values.
+- `parametric_C`: If `true`, the `C` field of the returned filter is a function of `(x,u,p,t)`, otherwise it is a matrix that is evaluated at the `x0map, pmap` values.
+- `parametric_D`: If `true`, the `D` field of the returned filter is a function of `(x,u,p,t)`, otherwise it is a matrix that is evaluated at the `x0map, pmap` values.
+- `parametric_R1`: If `true`, the `R1` field of the returned filter is a function of `(x,u,p,t)`, otherwise it is a matrix that is evaluated at the `x0map, pmap` values.
+- `parametric_R2`: If `true`, the `R2` field of the returned filter is a function of `(x,u,p,t)`, otherwise it is a matrix that is evaluated at the `x0map, pmap` values.
+- `tuplify`: If `true`, the parameter vector `p` is returned as a tuple instead of an array. This can improve performance for filters with a small number of parameters of heterogeneous types.
 - `kwargs`: Additional keyword arguments passed to `mtkcompile`.
 """
 function LowLevelParticleFilters.KalmanFilter(model::System, inputs, outputs; disturbance_inputs, Ts, R1, R2, x0map=[], pmap=[], σ0 = 1e-4, init=false, static=true, split = true, simplify=true, discretize = true, tuplify = true,
@@ -487,11 +500,14 @@ function LowLevelParticleFilters.KalmanFilter(model::System, inputs, outputs; di
     force_SA = static
     expression=Val{false}
     t = ModelingToolkit.get_iv(iosys)
+    Afun  = Symbolics.build_function(A,  x_sym, inputs, ps, t; force_SA, expression)[1]
+    Bfun = Symbolics.build_function(B, x_sym, inputs, ps, t; force_SA, expression)[1]
+    discABfun = Symbolics.build_function(Base.exp(Ts*[A B; zeros(nu, nx+nu)]),  x_sym, inputs, ps, t; force_SA, expression)[1]
+
     if parametricA
-        Afun  = Symbolics.build_function(A,  x_sym, inputs, ps, t; force_SA, expression)[1]
         if discretize
             A = function (x,u,p,t)
-                ABd = exp(Ts * [Afun(x,u,p,t) Bfun(x,u,p,t); zeros(nu, nx) zeros(nu, nu)])
+                ABd = (discABfun(x,u,p,t))
                 ABd[1:nx, 1:nx]
             end
         else
@@ -501,10 +517,9 @@ function LowLevelParticleFilters.KalmanFilter(model::System, inputs, outputs; di
         A = Symbolics.unwrap.(A)
     end
     if parametricB
-        Bfun = Symbolics.build_function(B, x_sym, inputs, ps, t; force_SA, expression)[1]
         if discretize
             B = function (x,u,p,t)
-                ABd = exp(Ts * [Afun(x,u,p,t) Bfun(x,u,p,t); zeros(nu, nx) zeros(nu, nu)])
+                ABd = (discABfun(x,u,p,t))
                 ABd[1:nx, nx+1:end]
             end
         else
@@ -564,41 +579,9 @@ function LowLevelParticleFilters.KalmanFilter(model::System, inputs, outputs; di
         end
     end
 
-    # if parametric
-    #     if discretize
-    #         A = function (x,u,p,t)
-    #             ABd = exp(Ts * [Afun(x,u,p,t) Bfun(x,u,p,t); zeros(nu, nx) zeros(nu, nu)])
-    #             ABd[1:nx, 1:nx]
-    #         end
-    #         B = function (x,u,p,t)
-    #             ABd = exp(Ts * [Afun(x,u,p,t) Bfun(x,u,p,t); zeros(nu, nx) zeros(nu, nu)])
-    #             ABd[1:nx, nx+1:end]
-    #         end
-    #     else
-    #         A = Afun
-    #         B = Bfun
-    #     end
-    #     C = Cfun
-    #     D = Dfun
-    #     R1 = constantBw ? R1 : R1fun
-    #     R2 = constantDw ? R2 : R2fun
-    # else
-    #     A  = Afun(zeros(nx), zeros(nu), p, 0.0)
-    #     B  = Bfun(zeros(nx), zeros(nu), p, 0.0)
-    #     C  = Cfun(zeros(nx), zeros(nu), p, 0.0)
-    #     D  = Dfun(zeros(nx), zeros(nu), p, 0.0)
-    #     R1 = constantBw ? R1 : R1fun(zeros(nx), zeros(nu), p, 0.0)
-    #     R2 = constantDw ? R2 : R2fun(zeros(nx), zeros(nu), p, 0.0)
-    #     if discretize
-    #         ABd = exp(Ts * [A B; zeros(nu, nx) zeros(nu, nu)])
-    #         A = ABd[1:nx, 1:nx]
-    #         B = ABd[1:nx, nx+1:end]
-    #     end
-    # end
-
     prob = StateEstimationProblem(model, inputs, outputs; disturbance_inputs, discretization = (f_cont, Ts, x_inds, a_inds, nu)->f_cont, Ts, df = SimpleMvNormal(zeros(nw), I(nw)), dg = SimpleMvNormal(zeros(ny), I(ny)), x0map, pmap, σ0, init, static, split, simplify, force_SA, kwargs...)
 
-    KalmanFilter(A, B, C, D, R1, R2, d0; Ts, nu, ny, nx, p, names), x_sym, ps, iosys, mats, prob
+    (; kf=KalmanFilter(A, B, C, D, R1, R2, d0; Ts, nu, ny, nx, p, names), x_sym, ps, iosys, mats, prob)
 
 
 end

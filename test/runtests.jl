@@ -115,4 +115,10 @@ plot!(solu, idxs=cmodel.y^2 + 0.1*sin(cmodel.u))
     @test fsole_static.Rt[end] ≈ fsole_dynamic.Rt[end]
 end
 
+
+@testset "linear" begin
+    @info "Testing linear"
+    include("test_linear.jl")
+end
+
 # end
