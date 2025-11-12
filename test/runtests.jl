@@ -12,17 +12,23 @@ using LinearAlgebra
     t = ModelingToolkit.t_nounits
 D = ModelingToolkit.D_nounits
 
-@mtkmodel SimpleSys begin
-    @variables begin
+@component function SimpleSys(; name)
+    pars = @parameters begin
+    end
+
+    vars = @variables begin
         x(t) = 0
         u(t) = 0
         y(t)
         w(t), [disturbance = true, input = true]
     end
-    @equations begin
+
+    equations = [
         D(x) ~ -x + u + w # Explicitly encode where dynamics noise enters the system with w
         y ~ x
-    end
+    ]
+
+    return ODESystem(equations, t; name)
 end
 
 @named model = SimpleSys()
@@ -107,6 +113,12 @@ plot!(solu, idxs=cmodel.y^2 + 0.1*sin(cmodel.u))
     # Results should be approximately equal regardless of array type
     @test fsole_static.xt[end] ≈ fsole_dynamic.xt[end]
     @test fsole_static.Rt[end] ≈ fsole_dynamic.Rt[end]
+end
+
+
+@testset "linear" begin
+    @info "Testing linear"
+    include("test_linear.jl")
 end
 
 # end

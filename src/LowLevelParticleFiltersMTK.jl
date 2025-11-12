@@ -14,6 +14,8 @@ using ModelingToolkit: generate_control_function, build_explicit_observed_functi
 
 export StateEstimationProblem, StateEstimationSolution, get_filter, propagate_distribution, EstimatedOutput
 
+ModelingToolkit.parameters(f::LowLevelParticleFilters.AbstractFilter) = LowLevelParticleFilters.parameters(f)
+
 struct StateEstimationProblem
     model
     iosys
@@ -223,7 +225,7 @@ g(xR::MvNormal, u, p, t)     # Compute an output distribution given input distri
 g(kf,           u, p, t)     # Compute an output distribution given the current state of an AbstractKalmanFilter
 ```
 
-# Arguments:
+## Arguments:
 - `kf`: A Kalman type filter
 - `prob`: A `StateEstimationProblem` object
 - `sym`: A symbolic expression or vector of symbolic expressions that the function should output.
@@ -351,5 +353,238 @@ function propagate_distribution(f, kf::UnscentedKalmanFilter, x, args...; kwargs
 end
 
 
+function has_vars(exprs)
+    for expr in exprs
+        if !isempty(ModelingToolkit.get_variables(expr))
+            return true
+        end
+    end
+    return false
+end
+
+@register_array_symbolic Base.exp(x::AbstractMatrix) begin
+    size=size(x)
+end
+
+# ==============================================================================
+## Linear systems
+# ==============================================================================
+"""
+    kf, x_sym, ps, iosys, mats, prob = KalmanFilter(model::System, inputs, outputs; disturbance_inputs, Ts, R1, R2, x0map=[], pmap=[], σ0 = 1e-4, init=false, static=true, split = true, simplify=true, discretize = true, parametric = false, kwargs...)
+
+Construct a Kalman filter for a linear MTK ODESystem. No check is performed to verify that the system is truly linear, if it is nonlinear, it will be linearized.
+
+## Returns:
+- `kf`: A Kalman filter. If `parametric=true`, the `A,B,C,D,R1,R2` fields are all functions of `(x,u,p,t)`, otherwise they are matrices that are evaluated at the `x0map, pmap` values.
+- `x_sym`: The symbolic state variables of the system.
+- `ps`: The symbolic parameters of the system.
+- `iosys`: The simplified MTK `System`
+- `mats`: A named tuple containing the symbolic system matrices `(A,B,C,D,Bw,Dw)`, where `Bw` and `Dw` are the input matrices corresponding to the disturbance inputs.
+- `prob`: A `StateEstimationProblem` object. This problem object does not play quite the same role as when using Unscented or Extended Kalman filters since the filter is created already by this constructor, but the problem object can still be useful for inspecting the simplified MTK system, to create `EstimatedOutput` objects and to make use of the symbolic indexing functionality.
+
+## Arguments:
+- `model`: An MTK System model, this model must not have undergone structural simplification.
+- `inputs`: The inputs to the dynamical system, a vector of symbolic variables.
+- `outputs`: The outputs of the dynamical system, a vector of symbolic variables.
+- `disturbance_inputs`: The disturbance inputs to the dynamical system, a vector of symbolic variables. These disturbance inputs indicate where dynamics noise ``w`` enters the system. The probability distribution ``R1`` is defined over these variables.
+- `Ts`: The discretization time step.
+- `R1`: The covariance matrix of the dynamics noise ``w``.
+- `R2`: The covariance matrix of the measurement noise ``e``.
+- `x0map`: A dictionary mapping symbolic variables to their initial values. If a variable is not provided, it is assumed to be initialized to zero.  The value can be a scalar number, in which case the covariance of the initial state is set to `σ0^2*I(nx)`, and the value can be a `Distributions.Normal`, in which case the provided distributions are used as the distribution of the initial state. When passing distributions, all state variables must be provided values.
+- `pmap`: A dictionary mapping symbolic variables to their values.
+- `σ0`: The standard deviation of the initial state. This is used when `x0map` is not provided.
+- `init`: If `true`, the initial state is computed using an initialization problem. If `false`, the initial state is computed using the `get_u0` function.
+- `static`: If `true`, static arrays are used for the state and covariance matrix. This can improve performance for small systems.
+- `split`: Passed to `mtkcompile`, see the documentation there.
+- `simplify`: Passed to `mtkcompile`, see the documentation there.
+- `discretize`: If `true`, the system is discretized using zero-order hold. If `false`, matrices/functions are generated for the continuous-time system, in which case the user must handle discretization themselves (filtering with a continuous-time system without discretization will yield nonsensical results).
+- `parametric_A`: If `true`, the `A` field of the returned filter is a function of `(x,u,p,t)`, otherwise it is a matrix that is evaluated at the `x0map, pmap` values.
+- `parametric_B`: If `true`, the `B` field of the returned filter is a function of `(x,u,p,t)`, otherwise it is a matrix that is evaluated at the `x0map, pmap` values.
+- `parametric_C`: If `true`, the `C` field of the returned filter is a function of `(x,u,p,t)`, otherwise it is a matrix that is evaluated at the `x0map, pmap` values.
+- `parametric_D`: If `true`, the `D` field of the returned filter is a function of `(x,u,p,t)`, otherwise it is a matrix that is evaluated at the `x0map, pmap` values.
+- `parametric_R1`: If `true`, the `R1` field of the returned filter is a function of `(x,u,p,t)`, otherwise it is a matrix that is evaluated at the `x0map, pmap` values.
+- `parametric_R2`: If `true`, the `R2` field of the returned filter is a function of `(x,u,p,t)`, otherwise it is a matrix that is evaluated at the `x0map, pmap` values.
+- `tuplify`: If `true`, the parameter vector `p` is returned as a tuple instead of an array. This can improve performance for filters with a small number of parameters of heterogeneous types.
+- `kwargs`: Additional keyword arguments passed to `mtkcompile`.
+"""
+function LowLevelParticleFilters.KalmanFilter(model::System, inputs, outputs; disturbance_inputs, Ts, R1, R2, x0map=[], pmap=[], σ0 = 1e-4, init=false, static=true, split = true, simplify=true, discretize = true, tuplify = true,
+    parametricA = false,
+    parametricB = false,
+    parametricC = false,
+    parametricD = false,
+    parametricR1 = false,
+    parametricR2 = false,
+    kwargs...)
+
+    # We always generate two versions of the dynamics function, the difference between them is that one has a signature augmented with disturbance inputs w, f(x,u,p,t,w), and the other does not, f(x,u,p,t).
+    # The particular filter used for estimation dictates which version of the dynamics function will be used.
+    all_inputs = [inputs; disturbance_inputs]
+
+    (; A, B, C, D), iosys = ModelingToolkit.linearize_symbolic(model, all_inputs, outputs; simplify = false, allow_input_derivatives = false, split, kwargs...)
+    for mat in (A,B,C,D)
+        # This step should not be needed for a linear model that is affine in the disturbance inputs, but for nonlinear models we need to do this to not have the disturbance inputs appear in the matrices
+        subs = Dict(disturbance_inputs .=> 0)
+        mat .= ModelingToolkit.fast_substitute.(mat, Ref(subs))
+    end
+    BBw = B
+    DDw = D
+    B = BBw[:, 1:length(inputs)]
+    Bw = BBw[:, length(inputs)+1:end]
+    D = DDw[:, 1:length(inputs)]
+    Dw = DDw[:, length(inputs)+1:end]
+    ps = setdiff(parameters(iosys), all_inputs)
+    x_sym = unknowns(iosys)
+
+    mats = (; A, B, C, D, Bw, Dw)
+    constantA = !has_vars(A)
+    constantB = !has_vars(B)
+    constantC = !has_vars(C)
+    constantD = !has_vars(D)
+    constantBw = !has_vars(Bw)
+    constantDw = !has_vars(Dw)
+    parametricA || constantA || error("parametricA=false but A depends on (x,u,p,t), A = $(A)")
+    parametricB || constantB || error("parametricB=false but B depends on (x,u,p,t), B = $(B)")
+    parametricC || constantC || error("parametricC=false but C depends on (x,u,p,t), C = $(C)")
+    parametricD || constantD || error("parametricD=false but D depends on (x,u,p,t), D = $(D)")
+    parametricR1 || constantBw || error("parametricR1=false but Bw depends on (x,u,p,t), Bw = $(Bw)")
+    parametricR2 || constantDw || error("parametricR2=false but Dw depends on (x,u,p,t), Dw = $(Dw)")
+
+    nx = length(x_sym)
+    ny = length(outputs)
+    nu = length(inputs)
+    nw = length(disturbance_inputs)
+    na = count(ModelingToolkit.is_alg_equation, equations(iosys))
+    na == 0 || error("KalmanFilter only supports ODE systems, found $na algebraic equations. \n", equations(iosys))
+
+    # Handle initial distribution
+    pmap = merge(Dict(all_inputs .=> 0.0), Dict(pmap)) # Make sure disturbance inputs are initialized to zero if they are not explicitly provided in pmap
+    x0map = collect(x0map)
+    if !isempty(x0map) && (x0map[1][2] isa Distribution)
+        stdmap = map(collect(x0map)) do (sym, dist)
+            sym => dist.σ
+        end |> Dict
+        x0map = map(collect(x0map)) do (sym, dist)
+            sym => dist.μ
+        end
+        dists = true
+    else
+        dists = false
+    end
+
+    # Merge x0map and pmap into a single op mapping for InitializationProblem
+    op = Dict(x0map)
+    inputmap = Dict(all_inputs .=> 0.0) # Ensure inputs are initialized to zero if not provided
+    op = merge(inputmap, op, pmap)
+    if init
+        initprob = ModelingToolkit.InitializationProblem(iosys, 0.0, op)
+        initsol = solve(initprob)
+        p = Tuple(initprob.ps[p] for p in ps) # Use tuple instead of heterogeneously typed array for better performance
+        x0 = SVector{nx}(initsol[x_sym])
+    else
+        x0 = SVector{nx}(ModelingToolkit.get_u0(iosys, op))
+        p0 = ModelingToolkit.get_p(iosys, op; split)
+        p = tuplify && p0 isa AbstractVector ? tuple((p0)...) : p0
+    end
+
+    if dists
+        R_mat = diagm([stdmap[Num(sym)]^2 for sym in x_sym])
+        d0 = SimpleMvNormal(static ? x0 : Vector(x0), static ? SMatrix{nx,nx}(R_mat) : R_mat)
+    else
+        R_mat = σ0^2*I(nx)
+        d0 = SimpleMvNormal(static ? x0 : Vector(x0), static ? SMatrix{nx,nx}(R_mat) : Matrix(R_mat))
+    end
+
+    names = SignalNames(x = string.(x_sym), u = string.(inputs), y = string.(outputs), name = string(nameof(model)))
+
+    # build functions
+    force_SA = static
+    expression=Val{false}
+    t = ModelingToolkit.get_iv(iosys)
+    Afun  = Symbolics.build_function(A,  x_sym, inputs, ps, t; force_SA, expression)[1]
+    Bfun = Symbolics.build_function(B, x_sym, inputs, ps, t; force_SA, expression)[1]
+    discABfun = Symbolics.build_function(Base.exp(Ts*[A B; zeros(nu, nx+nu)]),  x_sym, inputs, ps, t; force_SA, expression)[1]
+
+    if parametricA
+        if discretize
+            A = function (x,u,p,t)
+                ABd = (discABfun(x,u,p,t))
+                ABd[1:nx, 1:nx]
+            end
+        else
+            A = Afun
+        end
+    else
+        A = Symbolics.unwrap.(A)
+    end
+    if parametricB
+        if discretize
+            B = function (x,u,p,t)
+                ABd = (discABfun(x,u,p,t))
+                ABd[1:nx, nx+1:end]
+            end
+        else
+            B = Bfun
+        end
+    else
+        B = Symbolics.unwrap.(B)
+    end
+    if parametricC
+        Cfun = Symbolics.build_function(C, x_sym, inputs, ps, t; force_SA, expression)[1]
+        C = Cfun
+    else
+        C = Symbolics.unwrap.(C)
+    end
+    if parametricD
+        Dfun = Symbolics.build_function(D, x_sym, inputs, ps, t; force_SA, expression)[1]
+        D = Dfun
+    else
+        D = Symbolics.unwrap.(D)
+    end
+    if parametricR1
+        Bwfun = Symbolics.build_function(Bw, x_sym, inputs, ps, t; force_SA, expression)[1]
+        R1 = let R1=R1
+            function (x,u,p,t)
+                Bwi = Bwfun(x,u,p,t)
+                Bwi * R1 * Bwi'
+            end
+        end
+    else
+        Bw = Symbolics.unwrap.(Bw)
+        R1 = Bw * R1 * Bw'
+    end
+    if parametricR2
+        Dwfun = Symbolics.build_function(Dw, x_sym, inputs, ps, t; force_SA, expression)[1]
+        R2 = let R1=R1, R2=R2
+            if parametricR1
+                function (x,u,p,t)
+                    Dwi = Dwfun(x,u,p,t)
+                    R2 + Dwi * R1(x,u,p,t) * Dwi'
+                end
+            else
+                function (x,u,p,t)
+                    Dwi = Dwfun(x,u,p,t)
+                    R2 + Dwi * R1 * Dwi'
+                end
+            end
+        end
+    else
+        Dw = Symbolics.unwrap.(Dw)
+        Dw
+        if iszero(Dw)
+            # R2 = R2
+        elseif !parametricR1
+            R2 = R2 + Dw * R1 * Dw'
+        else
+            error("Constant R2 with parametric R1 and nonzero Dw is not yet supported.")
+        end
+    end
+
+    prob = StateEstimationProblem(model, inputs, outputs; disturbance_inputs, discretization = (f_cont, Ts, x_inds, a_inds, nu)->f_cont, Ts, df = SimpleMvNormal(zeros(nw), I(nw)), dg = SimpleMvNormal(zeros(ny), I(ny)), x0map, pmap, σ0, init, static, split, simplify, force_SA, kwargs...)
+
+    (; kf=KalmanFilter(A, B, C, D, R1, R2, d0; Ts, nu, ny, nx, p, names), x_sym, ps, iosys, mats, prob)
+
+
+end
+    
 
 end
