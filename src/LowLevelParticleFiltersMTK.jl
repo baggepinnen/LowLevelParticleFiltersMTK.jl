@@ -71,11 +71,13 @@ sol       = StateEstimationSolution(filtersol, prob)   # Package into higher-lev
 plot(sol, idxs=[prob.state; prob.outputs; prob.inputs]) # Plot the solution
 ```
 """
-function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, discretization, Ts, df, dg, x0map=[], pmap=[], σ0 = 1e-4, init=false, static=true, split = false, simplify=true, force_SA=true, xscalemap = nothing, kwargs...)
+function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, discretization, Ts, df, dg, x0map=[], pmap=[], σ0 = 1e-4, init=false, static=true, split = false, simplify=false, force_SA=true, xscalemap = nothing, kwargs...)
 
     # We always generate two versions of the dynamics function, the difference between them is that one has a signature augmented with disturbance inputs w, f(x,u,p,t,w), and the other does not, f(x,u,p,t).
     # The particular filter used for estimation dictates which version of the dynamics function will be used.
-    model = mtkcompile(model; inputs, outputs, disturbance_inputs, simplify, split, kwargs...)
+    if !ModelingToolkit.isscheduled(model)
+        model = mtkcompile(model; inputs, outputs, disturbance_inputs, simplify, split, kwargs...)
+    end
     f, x_sym, ps, iosys = generate_control_function(model, inputs, disturbance_inputs; simplify, split, force_SA, disturbance_argument=false, kwargs...);
     f_aug, _ = generate_control_function(model, inputs, disturbance_inputs; simplify, split, force_SA, disturbance_argument=true, kwargs...);
 
@@ -117,8 +119,11 @@ function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, disc
         p = Tuple(initprob.ps[p] for p in ps) # Use tuple instead of heterogeneously typed array for better performance
         x0 = SVector{nx}(initsol[x_sym])
     else
-        x0 = SVector{nx}(ModelingToolkit.get_u0(iosys, op))
-        p0 = ModelingToolkit.get_p(iosys, op)
+        prob = ModelingToolkit.ODEProblem(iosys, op, (0.0, Ts))
+        x0 = SVector{nx}(prob.u0)
+        p0 = prob.p
+        # x0 = SVector{nx}(ModelingToolkit.get_u0(iosys, op))
+        # p0 = ModelingToolkit.get_p(iosys, op)
         p = p0 isa AbstractVector ? tuple(p0...) : p0
     end
 
