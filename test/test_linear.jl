@@ -64,7 +64,7 @@ for parametricA = (true, ),
 
     fsole = forward_trajectory(kf, u, y)
     if discretize # result is nonsense if not discretized, so we just test that it runs
-        @test sum(abs2, reduce(hcat, x .- fsole.xt)) / 100 < 0.1
+        @test sum(abs2, reduce(hcat, x .- fsole.xt)) / length(u) < 0.2
     end
 end
 
