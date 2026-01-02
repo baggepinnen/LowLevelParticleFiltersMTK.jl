@@ -59,6 +59,10 @@ for parametricA = (true, ),
     @test kf.Ts == Ts
 
     u = [randn(1) for _ in 1:100]
+
+    # @show parametricA parametricB parametricC parametricD parametricR1 parametricR2 discretize split
+    # println()
+
     x,u,y = simulate(kf, u, dynamics_noise=true, measurement_noise=true, sample_initial=true)
 
 

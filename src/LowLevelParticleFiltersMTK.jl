@@ -429,7 +429,7 @@ function LowLevelParticleFilters.KalmanFilter(model::System, inputs, outputs; di
     for mat in (A,B,C,D)
         # This step should not be needed for a linear model that is affine in the disturbance inputs, but for nonlinear models we need to do this to not have the disturbance inputs appear in the matrices
         subs = Dict(disturbance_inputs .=> 0)
-        mat .= ModelingToolkit.fast_substitute.(mat, Ref(subs))
+        mat .= ModelingToolkit.substitute.(mat, Ref(subs))
     end
     BBw = B
     DDw = D
@@ -439,6 +439,10 @@ function LowLevelParticleFilters.KalmanFilter(model::System, inputs, outputs; di
     Dw = DDw[:, length(inputs)+1:end]
     ps = setdiff(parameters(iosys), all_inputs)
     x_sym = unknowns(iosys)
+    function really_unwrap(x)
+        r = Symbolics.unwrap(x)
+        r isa Number ? r : r.val
+    end
 
     mats = (; A, B, C, D, Bw, Dw)
     constantA = !has_vars(A)
@@ -507,7 +511,7 @@ function LowLevelParticleFilters.KalmanFilter(model::System, inputs, outputs; di
     t = ModelingToolkit.get_iv(iosys)
     Afun  = Symbolics.build_function(A,  x_sym, inputs, ps, t; force_SA, expression)[1]
     Bfun = Symbolics.build_function(B, x_sym, inputs, ps, t; force_SA, expression)[1]
-    discABfun = Symbolics.build_function(Base.exp(Ts*[A B; zeros(nu, nx+nu)]),  x_sym, inputs, ps, t; force_SA, expression)[1]
+    discABfun = Symbolics.build_function(Base.exp(Ts*Num.([A B; zeros(nu, nx+nu)])),  x_sym, inputs, ps, t; force_SA, expression)[1]
 
     if parametricA
         if discretize
@@ -519,7 +523,7 @@ function LowLevelParticleFilters.KalmanFilter(model::System, inputs, outputs; di
             A = Afun
         end
     else
-        A = Symbolics.unwrap.(A)
+        A = really_unwrap.(A)
     end
     if parametricB
         if discretize
@@ -531,19 +535,19 @@ function LowLevelParticleFilters.KalmanFilter(model::System, inputs, outputs; di
             B = Bfun
         end
     else
-        B = Symbolics.unwrap.(B)
+        B = really_unwrap.(B)
     end
     if parametricC
         Cfun = Symbolics.build_function(C, x_sym, inputs, ps, t; force_SA, expression)[1]
         C = Cfun
     else
-        C = Symbolics.unwrap.(C)
+        C = really_unwrap.(C)
     end
     if parametricD
         Dfun = Symbolics.build_function(D, x_sym, inputs, ps, t; force_SA, expression)[1]
         D = Dfun
     else
-        D = Symbolics.unwrap.(D)
+        D = really_unwrap.(D)
     end
     if parametricR1
         Bwfun = Symbolics.build_function(Bw, x_sym, inputs, ps, t; force_SA, expression)[1]
@@ -554,7 +558,7 @@ function LowLevelParticleFilters.KalmanFilter(model::System, inputs, outputs; di
             end
         end
     else
-        Bw = Symbolics.unwrap.(Bw)
+        Bw = really_unwrap.(Bw)
         R1 = Bw * R1 * Bw'
     end
     if parametricR2
@@ -573,8 +577,7 @@ function LowLevelParticleFilters.KalmanFilter(model::System, inputs, outputs; di
             end
         end
     else
-        Dw = Symbolics.unwrap.(Dw)
-        Dw
+        Dw = really_unwrap.(Dw)
         if iszero(Dw)
             # R2 = R2
         elseif !parametricR1
