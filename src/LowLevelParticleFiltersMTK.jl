@@ -429,7 +429,7 @@ function LowLevelParticleFilters.KalmanFilter(model::System, inputs, outputs; di
     for mat in (A,B,C,D)
         # This step should not be needed for a linear model that is affine in the disturbance inputs, but for nonlinear models we need to do this to not have the disturbance inputs appear in the matrices
         subs = Dict(disturbance_inputs .=> 0)
-        mat .= ModelingToolkit.fast_substitute.(mat, Ref(subs))
+        mat .= ModelingToolkit.substitute.(mat, Ref(subs))
     end
     BBw = B
     DDw = D
