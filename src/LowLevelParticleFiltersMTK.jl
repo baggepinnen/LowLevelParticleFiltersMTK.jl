@@ -367,9 +367,6 @@ function has_vars(exprs)
     return false
 end
 
-@register_array_symbolic Base.exp(x::AbstractMatrix) begin
-    size=size(x)
-end
 
 # ==============================================================================
 ## Linear systems
