@@ -388,9 +388,9 @@ Construct a Kalman filter for a linear MTK ODESystem. No check is performed to v
 - `model`: An MTK System model, this model must not have undergone structural simplification.
 - `inputs`: The inputs to the dynamical system, a vector of symbolic variables.
 - `outputs`: The outputs of the dynamical system, a vector of symbolic variables.
-- `disturbance_inputs`: The disturbance inputs to the dynamical system, a vector of symbolic variables. These disturbance inputs indicate where dynamics noise ``w`` enters the system. The probability distribution ``R1`` is defined over these variables.
+- `disturbance_inputs`: The disturbance inputs to the dynamical system, a vector of symbolic variables. These disturbance inputs indicate where dynamics noise ``w`` enters the system. The probability distribution with covariance ``R_1`` is defined over these variables.
 - `Ts`: The discretization time step.
-- `R1`: The covariance matrix of the dynamics noise ``w``.
+- `R1`: The covariance matrix of the dynamics noise (disturbance inputs) ``w``.
 - `R2`: The covariance matrix of the measurement noise ``e``.
 - `x0map`: A dictionary mapping symbolic variables to their initial values. If a variable is not provided, it is assumed to be initialized to zero.  The value can be a scalar number, in which case the covariance of the initial state is set to `σ0^2*I(nx)`, and the value can be a `Distributions.Normal`, in which case the provided distributions are used as the distribution of the initial state. When passing distributions, all state variables must be provided values.
 - `pmap`: A dictionary mapping symbolic variables to their values.
