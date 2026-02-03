@@ -1,0 +1,8 @@
+[deps]
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+LowLevelParticleFiltersMTK = "6906b499-63f5-4dd8-acfd-28b0f8b24f7d"
+LowLevelParticleFilters = "d9d29d28-c116-5dba-9239-57a5fe23875b"
+ModelingToolkit = "961ee093-0014-501f-94e3-6117800e7a78"
+
+[compat]
+julia = "1.10"
