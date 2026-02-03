@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Home · LowLevelParticleFiltersMTK Documentation</title><meta name="title" content="Home · LowLevelParticleFiltersMTK Documentation"/><meta property="og:title" content="Home · LowLevelParticleFiltersMTK Documentation"/><meta property="twitter:title" content="Home · LowLevelParticleFiltersMTK Documentation"/><meta name="description" content="Documentation for LowLevelParticleFiltersMTK Documentation."/><meta property="og:description" content="Documentation for LowLevelParticleFiltersMTK Documentation."/><meta property="twitter:description" content="Documentation for LowLevelParticleFiltersMTK Documentation."/><script data-outdated-warner src="assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.050/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL="."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="assets/documenter.js"></script><script src="search_index.js"></script><script src="siteinfo.js"></script><script src="../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href>LowLevelParticleFiltersMTK Documentation</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li class="is-active"><a class="tocitem" href>Home</a><ul class="internal"><li><a class="tocitem" href="#Installation"><span>Installation</span></a></li><li><a class="tocitem" href="#Challenges-with-performing-state-estimation-with-ModelingToolkit-models"><span>Challenges with performing state estimation with ModelingToolkit models</span></a></li><li><a class="tocitem" href="#Workflow"><span>Workflow</span></a></li><li><a class="tocitem" href="#Example"><span>Example</span></a></li></ul></li><li><a class="tocitem" href="api/">API</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Home</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Home</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/baggepinnen/LowLevelParticleFiltersMTK.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/baggepinnen/LowLevelParticleFiltersMTK.jl/blob/main/docs/src/index.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="LowLevelParticleFiltersMTK"><a class="docs-heading-anchor" href="#LowLevelParticleFiltersMTK">LowLevelParticleFiltersMTK</a><a id="LowLevelParticleFiltersMTK-1"></a><a class="docs-heading-anchor-permalink" href="#LowLevelParticleFiltersMTK" title="Permalink"></a></h1><p>A helper package for state-estimation workflows using <a href="https://github.com/baggepinnen/LowLevelParticleFilters.jl">LowLevelParticleFilters.jl</a> with <a href="https://github.com/SciML/ModelingToolkit.jl/">ModelingToolkit</a> models.</p><h2 id="Installation"><a class="docs-heading-anchor" href="#Installation">Installation</a><a id="Installation-1"></a><a class="docs-heading-anchor-permalink" href="#Installation" title="Permalink"></a></h2><p>The package is registered, you can install it using:</p><pre><code class="language-julia hljs">import Pkg; Pkg.add(&quot;LowLevelParticleFiltersMTK&quot;)</code></pre><h2 id="Challenges-with-performing-state-estimation-with-ModelingToolkit-models"><a class="docs-heading-anchor" href="#Challenges-with-performing-state-estimation-with-ModelingToolkit-models">Challenges with performing state estimation with ModelingToolkit models</a><a id="Challenges-with-performing-state-estimation-with-ModelingToolkit-models-1"></a><a class="docs-heading-anchor-permalink" href="#Challenges-with-performing-state-estimation-with-ModelingToolkit-models" title="Permalink"></a></h2><p>Consider a discrete-time dynamical system for which we want to perform state estimation:</p><p class="math-container">\[\begin{aligned}
+x(t+1) &amp;= f(x(t), u(t), p, t, w(t))\\
+y(t) &amp;= g(x(t), u(t), p, t, e(t))
+\end{aligned}\]</p><p>Getting a ModelingToolkit model into this form requires several steps that are non trivial, such as generating the dynamics and measurement functions, <span>$f$</span> and <span>$g$</span>, on the form required by the filter and discretizing a continuous-time model.</p><p>Workflows involving ModelingToolkit also demand symbolic indexing rather than indexing with integers, this need arises due to the fact that <strong>the state realization for the system is chosen by MTK</strong> rather than by the user, and this realization may change between different versions of MTK. One cannot normally specify the required initial state distribution and the dynamics noise distribution without having knowledge of the state realization. To work around this issue, this package requires the user to explicitly model how the disturbance inputs <span>$w$</span> are affecting the dynamics, such that the realization of the dynamics noise becomes independent on the chosen state realization. This results in a dynamical model where the dynamics disturbance <span>$w$</span> is an input to the model</p><p class="math-container">\[\dot{x} = f(x, u, p, t, w)\]</p><p>Some state estimators handle this kind of dynamics natively, like the <a href="https://baggepinnen.github.io/LowLevelParticleFilters.jl/dev/api/#LowLevelParticleFilters.UnscentedKalmanFilter-Union{Tuple{AUGM},%20Tuple{AUGD},%20Tuple{IPM},%20Tuple{IPD},%20Tuple{Any,%20LowLevelParticleFilters.AbstractMeasurementModel,%20Any},%20Tuple{Any,%20LowLevelParticleFilters.AbstractMeasurementModel,%20Any,%20Any}}%20where%20{IPD,%20IPM,%20AUGD,%20AUGM}"><code>UnscentedKalmanFilter</code></a> with <code>AUGD = true</code>, while others, like the <a href="https://baggepinnen.github.io/LowLevelParticleFilters.jl/dev/api/#LowLevelParticleFilters.ExtendedKalmanFilter"><code>ExtendedKalmanFilter</code></a> require manipulation of this model to work. This package handles such manipulation automatically, e.g., by continuously linearizing <span>$f$</span> w.r.t. <span>$w$</span> to obtain <span>$B_w(t)$</span> and providing the <code>ExtendedKalmanFilter</code> with the time-varying dynamics covariance matrix <span>$R_1(x, u, p, t) = B_w(t) R_w B_w(t)^T$</span>.</p><p>Finally, this package provides symbolic indexing of the solution object, such that one can easily obtain the estimated posterior distribution over any arbitrary variable in the model, including &quot;observed&quot; variables that are not part of the state vector being estimated by the estimator.</p><h2 id="Workflow"><a class="docs-heading-anchor" href="#Workflow">Workflow</a><a id="Workflow-1"></a><a class="docs-heading-anchor-permalink" href="#Workflow" title="Permalink"></a></h2><blockquote><p>[!TIP] It is assumed that the reader is familiar with the basics of LowLevelParticleFilters.jl. Consult <a href="https://baggepinnen.github.io/LowLevelParticleFilters.jl/dev/">the documentation</a> and the video lectures liked therein to obtain such familiarity.</p></blockquote><p>The workflow can be summarized as follows</p><ol><li>Define a model using ModelingToolkit</li><li>Create an instance of <code>prob = StateEstimationProblem(...)</code>. This problem contains the model as well as specifications of inputs, outputs, disturbance inputs, noise probability distributions and discretization method.</li><li>Instantiate a state estimator using <code>filt = get_filter(prob, FilterConstructor)</code>. This calls the filter constructor with the appropriate dynamics functions depending on what type of filter is used.</li><li>Perform state estimation using the filter object as you would normally do with LowLevelParticleFilters.jl. Obtain a <code>fsol::KalmanFilteringSolution</code> object, either from calling <code>LowLevelParticleFilters.forward_trajectory</code> or by creating one manually after having performed custom filtering.</li><li>Wrap the <code>fsol</code> object in a <code>sol = StateEstimationSolution(fsol, prob)</code> object. This will provide symbolic indexing capabilities similar to how solution objects work in ModelingToolkit.</li><li>Analyze the solution object using, e.g., <code>sol[var], plot(sol), plot(sol, idxs=[var1, var2])</code> etc.</li><li>Profit from your newly derived insight.</li></ol><p>As you can see, the workflow is similar to the standard MTK workflow, but contains a few more manual steps, notably the instantiation of the filter in step 3. and the manual wrapping of the solution object in step 5. The design is made this way since state estimation does not fit neatly into a problem-&gt;solve framework, in particular, one may have measurements arriving at irregular intervals, partial measurements, custom modifications of the covariance of the estimator etc. For simple cases where batch filtering (offline) is applicable, the function <a href="https://baggepinnen.github.io/LowLevelParticleFilters.jl/dev/api/#LowLevelParticleFilters.forward_trajectory"><code>LowLevelParticleFilters.forward_trajectory</code></a> produces the required <code>KalmanFilteringSolution</code> object that can be wrapped in a <code>StateEstimationSolution</code> object. Situations that demand more flexibility instead require the user to manually construct this solution object, in which case inspecting the implementation of <code>LowLevelParticleFilters.forward_trajectory</code> and modifying it to suit your needs is a good starting point. An example of this is demonstrated in the tutorial <a href="https://baggepinnen.github.io/LowLevelParticleFilters.jl/dev/fault_detection/">fault detection</a>.</p><h2 id="Example"><a class="docs-heading-anchor" href="#Example">Example</a><a id="Example-1"></a><a class="docs-heading-anchor-permalink" href="#Example" title="Permalink"></a></h2><p>The example below demonstrates a complete workflow, annotating the code with comments to point out things that are perhaps non-obvious.</p><pre><code class="language-julia hljs">using LowLevelParticleFiltersMTK
+using LowLevelParticleFilters
+using LowLevelParticleFilters: SimpleMvNormal
+using ModelingToolkit
+using SeeToDee # used to discretize the dynamics
+using Plots
+using StaticArrays
+using LinearAlgebra
+
+t = ModelingToolkit.t_nounits
+D = ModelingToolkit.D_nounits
+
+@component function SimpleSys(; name)
+    pars = @parameters begin
+    end
+
+    vars = @variables begin
+        x(t) = 2.0
+        u(t) = 0
+        y(t)
+        w(t), [disturbance = true, input = true]
+    end
+
+    equations = [
+        D(x) ~ -x + u + w # Explicitly encode where dynamics noise enters the system with w
+        y ~ x
+    ]
+
+    return ODESystem(equations, t; name)
+end
+
+@named model = SimpleSys()  # Do not use @mtkbuild here
+cmodel  = complete(model)   # complete is required for variable indexing since we did not use @mtkbuild above
+inputs  = [cmodel.u]        # The (unbound) inputs to the system
+outputs = [cmodel.y]        # The outputs for which we obtain measurements
+disturbance_inputs = [cmodel.w] # The dynamics disturbance inputs to the system
+
+nu = length(inputs)             # Number of inputs
+nw = length(disturbance_inputs) # Number of disturbance inputs
+ny = length(outputs)            # Number of measured outputs
+R1 = SMatrix{nw,nw}(0.01I(nw))  # Dynamics noise covariance
+R2 = SMatrix{ny,ny}(0.1I(ny))   # Measurement noise covariance
+
+df = SimpleMvNormal(R1)         # Dynamics noise distribution. This has to be a Gaussian if using a Kalman-type filter
+dg = SimpleMvNormal(R2)         # Measurement noise distribution. This has to be a Gaussian if using a Kalman-type filter
+
+Ts = 0.1                        # Sampling interval
+discretization = function (f,Ts,x_inds,alg_inds,nu)
+  isempty(alg_inds) || error(&quot;Rk4 only handles differential equations, consider `Trapezoidal` instead&quot;)
+  SeeToDee.Rk4(f, Ts) # Discretization method
+end
+
+prob = StateEstimationProblem(model, inputs, outputs; disturbance_inputs, df, dg, discretization, Ts)
+
+# We instantiate two different filters for comparison
+ekf = get_filter(prob, ExtendedKalmanFilter)
+ukf = get_filter(prob, UnscentedKalmanFilter)
+
+# Simulate some data from the trajectory distribution implied by the model
+u     = [randn(nu) for _ in 1:30] # A random input sequence
+x,u,y = simulate(ekf, u, dynamics_noise=true, measurement_noise=true)
+
+# Perform the filtering in batch since the entire input-output sequence is available
+fsole = forward_trajectory(ekf, u, y)
+fsolu = forward_trajectory(ukf, u, y)
+
+# Wrap the filter solution objects in a StateEstimationSolution object
+sole = StateEstimationSolution(fsole, prob)
+solu = StateEstimationSolution(fsolu, prob)
+
+## We can access the solution to any variable in the model easily
+sole[cmodel.x] == sole[cmodel.y]
+
+## We can also obtain the solution as a trajectory of probability distributions
+sole[cmodel.x, dist=true]
+
+## We can plot the filter solution object using the plot recipe from LowLevelParticleFilters
+using Plots
+plot(fsole, size=(1000, 1000))
+plot!(fsole.t, reduce(hcat, x)&#39;, lab=&quot;True x&quot;)
+##
+plot(fsolu, size=(1000, 1000))
+plot!(fsolu.t, reduce(hcat, x)&#39;, lab=&quot;True x&quot;)
+
+## We can also plot the wrapped solution object
+plot(sole)
+plot!(solu)
+
+## The wrapped solution object allows for symbolic indexing,
+# note how we can easily plot the posterior distribution over y^2 + 0.1*sin(u) 
+plot(sole, idxs=cmodel.y^2 + 0.1*sin(cmodel.u))
+plot!(solu, idxs=cmodel.y^2 + 0.1*sin(cmodel.u))</code></pre></article><nav class="docs-footer"><a class="docs-footer-nextpage" href="api/">API »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.16.1 on <span class="colophon-date" title="Tuesday 3 February 2026 10:54">Tuesday 3 February 2026</span>. Using Julia version 1.11.8.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
