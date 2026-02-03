@@ -15,5 +15,5 @@ makedocs(
 
 deploydocs(
     repo = "github.com/baggepinnen/LowLevelParticleFiltersMTK.jl.git",
-    push_preview = true,
+    push_preview = false,
 )

@@ -1,8 +1,12 @@
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
-LowLevelParticleFiltersMTK = "6906b499-63f5-4dd8-acfd-28b0f8b24f7d"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 LowLevelParticleFilters = "d9d29d28-c116-5dba-9239-57a5fe23875b"
+LowLevelParticleFiltersMTK = "6906b499-63f5-4dd8-acfd-28b0f8b24f7d"
 ModelingToolkit = "961ee093-0014-501f-94e3-6117800e7a78"
+Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+SeeToDee = "1c904df7-48cd-41e7-921b-d889ed9a470c"
+StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 
 [compat]
 julia = "1.10"

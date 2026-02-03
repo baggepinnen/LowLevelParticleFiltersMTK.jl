@@ -32,8 +32,8 @@ Finally, this package provides symbolic indexing of the solution object, such th
 
 ## Workflow
 
-> [!TIP]
-> It is assumed that the reader is familiar with the basics of LowLevelParticleFilters.jl. Consult [the documentation](https://baggepinnen.github.io/LowLevelParticleFilters.jl/dev/) and the video lectures liked therein to obtain such familiarity.
+!!! tip
+    It is assumed that the reader is familiar with the basics of LowLevelParticleFilters.jl. Consult [the documentation](https://baggepinnen.github.io/LowLevelParticleFilters.jl/dev/) and the video lectures liked therein to obtain such familiarity.
 
 The workflow can be summarized as follows
 1. Define a model using ModelingToolkit
@@ -48,7 +48,7 @@ As you can see, the workflow is similar to the standard MTK workflow, but contai
 
 ## Example
 The example below demonstrates a complete workflow, annotating the code with comments to point out things that are perhaps non-obvious.
-```julia
+```@example FIRST
 using LowLevelParticleFiltersMTK
 using LowLevelParticleFilters
 using LowLevelParticleFilters: SimpleMvNormal
@@ -142,3 +142,13 @@ plot!(solu)
 plot(sole, idxs=cmodel.y^2 + 0.1*sin(cmodel.u))
 plot!(solu, idxs=cmodel.y^2 + 0.1*sin(cmodel.u))
 ```
+
+
+## Tips for modeling for state estimation
+When performing state estimation, we need disturbance inputs as indicated above. However, when simulating the model we may want to ignore these. The generally recommended approach is to use a component-based modeling approach. You may then create an outer model in which you `connect` input components corresponding to the disturbance inputs. For example, in a mechanical system you may in the outer model connect a `Rotational.Torque` component to a flange in the system model, this gives you an unbound input that adds an external disturbance torque to the flange.
+
+If you have measured/controlled inputs in the system you follow a similar approach, in the outer model you then
+- Simulation: Connect an input component that contains the input signal to the system, e.g., an interpolation component.
+- State estimation: Leave the disturbance inputs unconnected and pass them to the `disturbance_inputs` argument.
+
+This approach also prevents you from accidentally adding disturbances that cause non-physical behavior. For example, perturbing a _position_ without going through a _force_ is not physically realistic, you have to integrate a force or a torque, that in turn affects the velocity which is integrated to the position. You will not find an input component that inputs position, only force and torque, so adding such a non-physical position disturbance is not possible. 
