@@ -141,7 +141,10 @@ plot!(solu)
 # note how we can easily plot the posterior distribution over y^2 + 0.1*sin(u) 
 plot(sole, idxs=cmodel.y^2 + 0.1*sin(cmodel.u))
 plot!(solu, idxs=cmodel.y^2 + 0.1*sin(cmodel.u))
+savefig("solution.png") # hide
+nothing # hide
 ```
+![solution](solution.png)
 
 
 ## Tips for modeling for state estimation

@@ -12,7 +12,7 @@ using StaticArrays
 using RecipesBase
 using ModelingToolkit: generate_control_function, build_explicit_observed_function
 
-export StateEstimationProblem, StateEstimationSolution, get_filter, propagate_distribution, EstimatedOutput
+export StateEstimationProblem, StateEstimationSolution, get_filter, propagate_distribution, EstimatedOutput, KalmanFilter
 
 ModelingToolkit.parameters(f::LowLevelParticleFilters.AbstractFilter) = LowLevelParticleFilters.parameters(f)
 
