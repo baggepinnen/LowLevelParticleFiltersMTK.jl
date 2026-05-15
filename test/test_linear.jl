@@ -72,6 +72,42 @@ for parametricA = (true, ),
     end
 end
 
+@testset "discretization with non-parametric A/B" begin
+    # Regression test: when parametricA=parametricB=false and discretize=true,
+    # the filter's A and B must be the discretized (ZOH) matrices, not the
+    # continuous-time ones. Uses a parameter-free model so that A is constant.
+    @component function ConstSys(; name)
+        @variables begin
+            x(t) = 0
+            u(t) = 0
+            y(t)
+            w(t), [disturbance = true, input = true]
+        end
+        equations = [
+            D(x) ~ -x + u + w
+            y ~ x
+        ]
+        return ODESystem(equations, t; name)
+    end
+    @named cm2 = ConstSys()
+    cm2c = complete(cm2)
+    in2 = [cm2c.u]; out2 = [cm2c.y]; din2 = [cm2c.w]
+
+    kf_param, = KalmanFilter(cm2c, in2, out2; disturbance_inputs=din2, R1, R2, Ts,
+        parametricA=true, parametricB=true, discretize=true)
+    kf_const, = KalmanFilter(cm2c, in2, out2; disturbance_inputs=din2, R1, R2, Ts,
+        parametricA=false, parametricB=false, discretize=true)
+
+    xz = zero(SVector{1, Float64})
+    uz = zero(SVector{1, Float64})
+    Ad_param = kf_param.A(xz, uz, kf_param.p, 0.0)
+    Bd_param = kf_param.B(xz, uz, kf_param.p, 0.0)
+
+    @test kf_const.A ≈ Ad_param
+    @test kf_const.B ≈ Bd_param
+    # Continuous A = -1; the discretized A must equal exp(-Ts), not -1.
+    @test kf_const.A[1,1] ≈ exp(-Ts)
+end
 
 
 using Plots
