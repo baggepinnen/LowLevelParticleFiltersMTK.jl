@@ -515,6 +515,14 @@ function LowLevelParticleFilters.KalmanFilter(model::System, inputs, outputs; di
     ABaugfun = Symbolics.build_function(Num.([A B; zeros(nu, nx+nu)]), x_sym, inputs, ps, t; force_SA, expression)[1]
     discABfun = (x,u,p,t) -> Base.exp(Ts * ABaugfun(x,u,p,t))
 
+    # When discretize=true and A/B is non-parametric, evaluate discABfun once at the
+    # nominal point to obtain numeric discrete-time matrices. Without this, the
+    # non-parametric branch would feed the continuous-time A/B to the discrete KalmanFilter.
+    if discretize && (!parametricA || !parametricB)
+        u0_disc = static ? zero(SVector{nu, Float64}) : zeros(nu)
+        ABd0 = discABfun(x0, u0_disc, p, 0.0)
+    end
+
     if parametricA
         if discretize
             A = function (x,u,p,t)
@@ -525,7 +533,11 @@ function LowLevelParticleFilters.KalmanFilter(model::System, inputs, outputs; di
             A = Afun
         end
     else
-        A = really_unwrap.(A)
+        if discretize
+            A = ABd0[1:nx, 1:nx]
+        else
+            A = really_unwrap.(A)
+        end
     end
     if parametricB
         if discretize
@@ -537,7 +549,11 @@ function LowLevelParticleFilters.KalmanFilter(model::System, inputs, outputs; di
             B = Bfun
         end
     else
-        B = really_unwrap.(B)
+        if discretize
+            B = ABd0[1:nx, nx+1:end]
+        else
+            B = really_unwrap.(B)
+        end
     end
     if parametricC
         Cfun = Symbolics.build_function(C, x_sym, inputs, ps, t; force_SA, expression)[1]
