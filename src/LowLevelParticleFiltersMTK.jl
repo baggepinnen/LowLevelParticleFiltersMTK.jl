@@ -97,16 +97,22 @@ function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, disc
     # Handle initial distribution
     pmap = merge(Dict(disturbance_inputs .=> 0.0), Dict(pmap)) # Make sure disturbance inputs are initialized to zero if they are not explicitly provided in pmap
     x0map = collect(x0map)
-    if !isempty(x0map) && (x0map[1][2] isa Distribution)
-        stdmap = map(collect(x0map)) do (sym, dist)
-            sym => dist.σ
-        end |> Dict
-        x0map = map(collect(x0map)) do (sym, dist)
-            sym => dist.μ
+    if !isempty(x0map)
+        is_dist = map(p -> p[2] isa Distribution, x0map)
+        if any(is_dist) && !all(is_dist)
+            error("x0map must contain either only Distribution values or only scalar values, got a mix. Offending entries: $([p for (p, d) in zip(x0map, is_dist) if d != is_dist[1]])")
         end
-        dists = true
+        dists = all(is_dist)
     else
         dists = false
+    end
+    if dists
+        stdmap = map(x0map) do (sym, dist)
+            sym => dist.σ
+        end |> Dict
+        x0map = map(x0map) do (sym, dist)
+            sym => dist.μ
+        end
     end
 
     # Merge x0map and pmap into a single op mapping for InitializationProblem
@@ -470,16 +476,22 @@ function LowLevelParticleFilters.KalmanFilter(model::System, inputs, outputs; di
     # Handle initial distribution
     pmap = merge(Dict(all_inputs .=> 0.0), Dict(pmap)) # Make sure disturbance inputs are initialized to zero if they are not explicitly provided in pmap
     x0map = collect(x0map)
-    if !isempty(x0map) && (x0map[1][2] isa Distribution)
-        stdmap = map(collect(x0map)) do (sym, dist)
-            sym => dist.σ
-        end |> Dict
-        x0map = map(collect(x0map)) do (sym, dist)
-            sym => dist.μ
+    if !isempty(x0map)
+        is_dist = map(p -> p[2] isa Distribution, x0map)
+        if any(is_dist) && !all(is_dist)
+            error("x0map must contain either only Distribution values or only scalar values, got a mix. Offending entries: $([p for (p, d) in zip(x0map, is_dist) if d != is_dist[1]])")
         end
-        dists = true
+        dists = all(is_dist)
     else
         dists = false
+    end
+    if dists
+        stdmap = map(x0map) do (sym, dist)
+            sym => dist.σ
+        end |> Dict
+        x0map = map(x0map) do (sym, dist)
+            sym => dist.μ
+        end
     end
 
     # Merge x0map and pmap into a single op mapping for InitializationProblem
