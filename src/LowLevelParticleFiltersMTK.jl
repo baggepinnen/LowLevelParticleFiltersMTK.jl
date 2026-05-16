@@ -248,10 +248,13 @@ struct EstimatedOutput{KF, P, G}
 end
 
 (gg::EstimatedOutput)(x::AbstractVector, u, p=gg.kf.p, t=gg.kf.t) = gg.g(x, u, p, t)
-function (gg::EstimatedOutput)(kf::AbstractKalmanFilter, u, args...; kwargs...)
+function (gg::EstimatedOutput)(kf::AbstractKalmanFilter, u,
+        p = LowLevelParticleFilters.parameters(kf),
+        t = LowLevelParticleFilters.index(kf) * kf.Ts;
+        kwargs...)
     x = kf.x
     R = kf.R
-    gg(SimpleMvNormal(x,R),u,args...)
+    gg(SimpleMvNormal(x,R), u, p, t; kwargs...)
 end
 
 function (gg::EstimatedOutput)(xR::SimpleMvNormal, u, p = gg.kf.p, t = gg.kf.t, args...; kwargs...)
