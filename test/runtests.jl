@@ -147,6 +147,27 @@ end
 end
 
 
+@testset "x0map mixed Distribution/scalar errors" begin
+    using Distributions
+    # All Distribution -> OK (no error)
+    prob_dist = StateEstimationProblem(cmodel, inputs, outputs;
+        disturbance_inputs, df, dg, discretization, Ts,
+        x0map = [cmodel.x => Normal(0.0, 1.0)])
+    @test prob_dist isa StateEstimationProblem
+
+    # All scalar -> OK (no error)
+    prob_sc = StateEstimationProblem(cmodel, inputs, outputs;
+        disturbance_inputs, df, dg, discretization, Ts,
+        x0map = [cmodel.x => 0.0])
+    @test prob_sc isa StateEstimationProblem
+
+    # Mixed -> must error
+    bad = [cmodel.x => Normal(0.0, 1.0), cmodel.u => 0.5]
+    @test_throws ErrorException StateEstimationProblem(cmodel, inputs, outputs;
+        disturbance_inputs, df, dg, discretization, Ts, x0map = bad)
+end
+
+
 @testset "linear" begin
     @info "Testing linear"
     include("test_linear.jl")
