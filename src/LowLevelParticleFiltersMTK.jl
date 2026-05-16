@@ -508,7 +508,12 @@ function LowLevelParticleFilters.KalmanFilter(model::System, inputs, outputs; di
     t = ModelingToolkit.get_iv(iosys)
     Afun  = Symbolics.build_function(A,  x_sym, inputs, ps, t; force_SA, expression)[1]
     Bfun = Symbolics.build_function(B, x_sym, inputs, ps, t; force_SA, expression)[1]
-    discABfun = Symbolics.build_function(Base.exp(Ts*Num.([A B; zeros(nu, nx+nu)])),  x_sym, inputs, ps, t; force_SA, expression)[1]
+    # Build a function that returns the augmented continuous-time matrix [A B; 0 0]
+    # numerically; the matrix exponential is then taken at runtime on the numeric matrix.
+    # (Calling Base.exp on a Matrix{Num} dispatches to LinearAlgebra's matrix exponential,
+    # which only supports Float/Complex element types.)
+    ABaugfun = Symbolics.build_function(Num.([A B; zeros(nu, nx+nu)]), x_sym, inputs, ps, t; force_SA, expression)[1]
+    discABfun = (x,u,p,t) -> Base.exp(Ts * ABaugfun(x,u,p,t))
 
     if parametricA
         if discretize
