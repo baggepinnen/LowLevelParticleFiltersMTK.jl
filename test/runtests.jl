@@ -147,6 +147,37 @@ end
 end
 
 
+@testset "init=true exercises the InitializationProblem code path" begin
+    # Smoke test for the init=true branch: with a parametric model, verify the
+    # constructor runs, parameters are read from initsol, and the resulting
+    # filter can process a trajectory.
+    @component function ParamSys(; name)
+        @parameters a = 2.0
+        @variables begin
+            x(t) = 0.0
+            u(t) = 0.0
+            y(t)
+            w(t), [disturbance = true, input = true]
+        end
+        eqs = [D(x) ~ -a*x + u + w, y ~ x]
+        ODESystem(eqs, t; name)
+    end
+    @named ps_model = ParamSys()
+    cps = complete(ps_model)
+
+    prob_init = StateEstimationProblem(cps, [cps.u], [cps.y];
+        disturbance_inputs=[cps.w], df, dg, discretization, Ts,
+        pmap = Dict(cps.a => 3.5),
+        init = true)
+    # Single parameter `a` set via pmap, read back from initsol.ps[a]
+    @test prob_init.p == (3.5,)
+
+    # End-to-end: filter should run on the trajectory
+    ekf_init = get_filter(prob_init, ExtendedKalmanFilter)
+    fsol_init = forward_trajectory(ekf_init, u, y)
+    @test length(fsol_init.xt) == length(u)
+end
+
 @testset "EstimatedOutput(kf,...) defaults t from passed kf" begin
     # Build a fresh prob/EKF and advance the filter so its index > 0
     prob_t = StateEstimationProblem(cmodel, inputs, outputs;
