@@ -167,6 +167,62 @@ end
         disturbance_inputs, df, dg, discretization, Ts, x0map = bad)
 end
 
+@testset "init=true exercises the InitializationProblem code path" begin
+    # Smoke test for the init=true branch: with a parametric model, verify the
+    # constructor runs, parameters are read from initsol, and the resulting
+    # filter can process a trajectory.
+    @component function ParamSys(; name)
+        @parameters a = 2.0
+        @variables begin
+            x(t) = 0.0
+            u(t) = 0.0
+            y(t)
+            w(t), [disturbance = true, input = true]
+        end
+        eqs = [D(x) ~ -a*x + u + w, y ~ x]
+        ODESystem(eqs, t; name)
+    end
+    @named ps_model = ParamSys()
+    cps = complete(ps_model)
+
+    prob_init = StateEstimationProblem(cps, [cps.u], [cps.y];
+        disturbance_inputs=[cps.w], df, dg, discretization, Ts,
+        pmap = Dict(cps.a => 3.5),
+        init = true)
+    # Single parameter `a` set via pmap, read back from initsol.ps[a]
+    @test prob_init.p == (3.5,)
+
+    # End-to-end: filter should run on the trajectory
+    ekf_init = get_filter(prob_init, ExtendedKalmanFilter)
+    fsol_init = forward_trajectory(ekf_init, u, y)
+    @test length(fsol_init.xt) == length(u)
+end
+
+@testset "EstimatedOutput(kf,...) defaults t from passed kf" begin
+    # Build a fresh prob/EKF and advance the filter so its index > 0
+    prob_t = StateEstimationProblem(cmodel, inputs, outputs;
+        disturbance_inputs, df, dg, discretization, Ts)
+    ekf_t = get_filter(prob_t, ExtendedKalmanFilter)
+    u0 = [0.0]
+    y0 = [0.0]
+    for _ = 1:3
+        LowLevelParticleFilters.predict!(ekf_t, u0)
+        LowLevelParticleFilters.correct!(ekf_t, u0, y0)
+    end
+    @assert ekf_t.t > 0
+
+    # Output expression that depends on time: 2*t (using the global iv)
+    eo = EstimatedOutput(ekf_t, prob_t, 2 * t)
+    # default t should be LowLevelParticleFilters.index(kf)*kf.Ts
+    expected_t = 2 * (LowLevelParticleFilters.index(ekf_t) * ekf_t.Ts)
+    out = eo(ekf_t, u0)
+    @test out.μ[1] ≈ expected_t
+
+    # explicit t override
+    out_override = eo(ekf_t, u0, ekf_t.p, 5.0)
+    @test out_override.μ[1] ≈ 10.0
+end
+
 
 @testset "linear" begin
     @info "Testing linear"

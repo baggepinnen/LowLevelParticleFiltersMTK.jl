@@ -122,7 +122,9 @@ function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, disc
     if init
         initprob = ModelingToolkit.InitializationProblem(iosys, 0.0, op)
         initsol = solve(initprob)
-        p = Tuple(initprob.ps[p] for p in ps) # Use tuple instead of heterogeneously typed array for better performance
+        # Read parameters from the solution, not the problem: initialization may solve
+        # for parameter values, in which case initprob.ps[p] returns the pre-solve guess.
+        p = Tuple(initsol.ps[p] for p in ps)
         x0 = SVector{nx}(initsol[x_sym])
     else
         prob = ModelingToolkit.ODEProblem(iosys, op, (0.0, Ts))
@@ -252,10 +254,13 @@ struct EstimatedOutput{KF, P, G}
 end
 
 (gg::EstimatedOutput)(x::AbstractVector, u, p=gg.kf.p, t=gg.kf.t) = gg.g(x, u, p, t)
-function (gg::EstimatedOutput)(kf::AbstractKalmanFilter, u, args...; kwargs...)
+function (gg::EstimatedOutput)(kf::AbstractKalmanFilter, u,
+        p = LowLevelParticleFilters.parameters(kf),
+        t = LowLevelParticleFilters.index(kf) * kf.Ts;
+        kwargs...)
     x = kf.x
     R = kf.R
-    gg(SimpleMvNormal(x,R),u,args...)
+    gg(SimpleMvNormal(x,R), u, p, t; kwargs...)
 end
 
 function (gg::EstimatedOutput)(xR::SimpleMvNormal, u, p = gg.kf.p, t = gg.kf.t, args...; kwargs...)
@@ -496,7 +501,9 @@ function LowLevelParticleFilters.KalmanFilter(model::System, inputs, outputs; di
     if init
         initprob = ModelingToolkit.InitializationProblem(iosys, 0.0, op)
         initsol = solve(initprob)
-        p = Tuple(initprob.ps[p] for p in ps) # Use tuple instead of heterogeneously typed array for better performance
+        # Read parameters from the solution, not the problem: initialization may solve
+        # for parameter values, in which case initprob.ps[p] returns the pre-solve guess.
+        p = Tuple(initsol.ps[p] for p in ps)
         x0 = SVector{nx}(initsol[x_sym])
     else
         x0 = SVector{nx}(ModelingToolkit.get_u0(iosys, op))
