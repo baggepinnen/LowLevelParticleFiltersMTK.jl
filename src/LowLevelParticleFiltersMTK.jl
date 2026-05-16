@@ -512,8 +512,12 @@ function LowLevelParticleFilters.KalmanFilter(model::System, inputs, outputs; di
     # numerically; the matrix exponential is then taken at runtime on the numeric matrix.
     # (Calling Base.exp on a Matrix{Num} dispatches to LinearAlgebra's matrix exponential,
     # which only supports Float/Complex element types.)
-    ABaugfun = Symbolics.build_function(Num.([A B; zeros(nu, nx+nu)]), x_sym, inputs, ps, t; force_SA, expression)[1]
-    discABfun = (x,u,p,t) -> Base.exp(Ts * ABaugfun(x,u,p,t))
+    # Only build this when discretization is requested -- the symbolic build is wasted
+    # work otherwise and can be slow for non-trivial systems.
+    if discretize
+        ABaugfun = Symbolics.build_function(Num.([A B; zeros(nu, nx+nu)]), x_sym, inputs, ps, t; force_SA, expression)[1]
+        discABfun = (x,u,p,t) -> Base.exp(Ts * ABaugfun(x,u,p,t))
+    end
 
     if parametricA
         if discretize
