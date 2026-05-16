@@ -147,6 +147,32 @@ end
 end
 
 
+@testset "EstimatedOutput(kf,...) defaults t from passed kf" begin
+    # Build a fresh prob/EKF and advance the filter so its index > 0
+    prob_t = StateEstimationProblem(cmodel, inputs, outputs;
+        disturbance_inputs, df, dg, discretization, Ts)
+    ekf_t = get_filter(prob_t, ExtendedKalmanFilter)
+    u0 = [0.0]
+    y0 = [0.0]
+    for _ = 1:3
+        LowLevelParticleFilters.predict!(ekf_t, u0)
+        LowLevelParticleFilters.correct!(ekf_t, u0, y0)
+    end
+    @assert ekf_t.t > 0
+
+    # Output expression that depends on time: 2*t (using the global iv)
+    eo = EstimatedOutput(ekf_t, prob_t, 2 * t)
+    # default t should be LowLevelParticleFilters.index(kf)*kf.Ts
+    expected_t = 2 * (LowLevelParticleFilters.index(ekf_t) * ekf_t.Ts)
+    out = eo(ekf_t, u0)
+    @test out.μ[1] ≈ expected_t
+
+    # explicit t override
+    out_override = eo(ekf_t, u0, ekf_t.p, 5.0)
+    @test out_override.μ[1] ≈ 10.0
+end
+
+
 @testset "linear" begin
     @info "Testing linear"
     include("test_linear.jl")
