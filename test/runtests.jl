@@ -116,6 +116,37 @@ plot!(solu, idxs=cmodel.y^2 + 0.1*sin(cmodel.u))
 end
 
 
+@testset "propagate_distribution uses kf.state_mean / kf.state_cov (UKF)" begin
+    # Build a UKF where state_mean / state_cov are sentinel wrappers around the
+    # defaults that record they were called. propagate_distribution must invoke
+    # the kf's own functions, not hard-coded weighted_mean/weighted_cov.
+    state_mean_called = Ref(0)
+    state_cov_called  = Ref(0)
+    function tagged_mean(xs, W)
+        state_mean_called[] += 1
+        LowLevelParticleFilters.weighted_mean(xs, W)
+    end
+    function tagged_cov(xs, m, W)
+        state_cov_called[] += 1
+        LowLevelParticleFilters.weighted_cov(xs, m, W)
+    end
+
+    prob_p = StateEstimationProblem(cmodel, inputs, outputs; disturbance_inputs, df, dg, discretization, Ts)
+    ukf_tagged = UnscentedKalmanFilter{false,false,true,false}(
+        prob_p.f, prob_p.g, prob_p.df.Σ, prob_p.dg.Σ, prob_p.d0;
+        prob_p.Ts, prob_p.nu, prob_p.ny, prob_p.nx, prob_p.p,
+        state_mean = tagged_mean, state_cov = tagged_cov,
+    )
+
+    f = x -> 2.0 .* x
+    d_in = SimpleMvNormal(SVector(0.5), SMatrix{1,1}(0.25))
+    propagate_distribution(f, ukf_tagged, d_in)
+
+    @test state_mean_called[] >= 1
+    @test state_cov_called[]  >= 1
+end
+
+
 @testset "linear" begin
     @info "Testing linear"
     include("test_linear.jl")

@@ -352,8 +352,8 @@ function propagate_distribution(f, kf::UnscentedKalmanFilter, x, args...; kwargs
     m,S = mean(x), cov(x)
     xs = LowLevelParticleFilters.sigmapoints(m, S, kf.weight_params; cholesky! = kf.cholesky!)
     ys = [f(x, args...; kwargs...) for x in xs]
-    my = LowLevelParticleFilters.mean_with_weights(weighted_mean, ys, kf.weight_params)
-    Sy = LowLevelParticleFilters.cov_with_weights(weighted_cov, ys, my, kf.weight_params)
+    my = LowLevelParticleFilters.mean_with_weights(kf.state_mean, ys, kf.weight_params)
+    Sy = LowLevelParticleFilters.cov_with_weights(kf.state_cov, ys, my, kf.weight_params)
     return SimpleMvNormal(my, Sy)
 end
 
