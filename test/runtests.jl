@@ -223,6 +223,21 @@ end
     @test out_override.μ[1] ≈ 10.0
 end
 
+@testset "xscalemap aligned with x_sym" begin
+    captured_scale = Ref{Vector{Float64}}()
+    custom_disc = function (f, Ts, x_inds, a_inds, nu, scale_x)
+        captured_scale[] = collect(scale_x)
+        f
+    end
+    prob_xs = StateEstimationProblem(cmodel, inputs, outputs;
+        disturbance_inputs, df, dg, discretization=custom_disc, Ts,
+        xscalemap = Dict(cmodel.x => 7.0))
+    # prob_xs.state is x_sym; scale_x must be indexed in the same order.
+    i = findfirst(isequal(cmodel.x), prob_xs.state)
+    @test i !== nothing
+    @test captured_scale[][i] == 7.0
+end
+
 
 @testset "linear" begin
     @info "Testing linear"

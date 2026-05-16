@@ -144,7 +144,9 @@ function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, disc
     end
 
     if xscalemap !== nothing
-        scale_x = map(unknowns(iosys)) do sym
+        # Use x_sym (the order generate_control_function and the dynamics function use),
+        # not unknowns(iosys), since the two may disagree.
+        scale_x = map(x_sym) do sym
             abs(get(xscalemap, sym, 1.0))
         end
         f_disc = discretization(f_cont, Ts, x_inds, a_inds, nu, scale_x)
