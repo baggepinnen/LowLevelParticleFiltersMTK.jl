@@ -9,7 +9,7 @@ using StaticArrays
 using LinearAlgebra
 
 # @testset "LowLevelParticleFiltersMTK.jl" begin
-    t = ModelingToolkit.t_nounits
+t = ModelingToolkit.t_nounits
 D = ModelingToolkit.D_nounits
 
 @component function SimpleSys(; name)
@@ -80,12 +80,9 @@ plot!(solu)
 plot(sole, idxs=cmodel.y^2 + 0.1*sin(cmodel.u))
 plot!(solu, idxs=cmodel.y^2 + 0.1*sin(cmodel.u))
 
-
-
 ##
 @test sole[cmodel.x] == sole[cmodel.y]
 
-## Test static keyword argument
 @testset "static keyword argument" begin
     # Test default behavior (static=true)
     prob_static = StateEstimationProblem(cmodel, inputs, outputs; disturbance_inputs, df, dg, discretization, Ts, static=true)
@@ -113,6 +110,11 @@ plot!(solu, idxs=cmodel.y^2 + 0.1*sin(cmodel.u))
     # Results should be approximately equal regardless of array type
     @test fsole_static.xt[end] ≈ fsole_dynamic.xt[end]
     @test fsole_static.Rt[end] ≈ fsole_dynamic.Rt[end]
+end
+
+@testset "DAE UKF" begin
+    @info "testing DAE UKF"
+    include("test_daeukf.jl")
 end
 
 

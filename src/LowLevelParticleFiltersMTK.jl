@@ -3,7 +3,7 @@ module LowLevelParticleFiltersMTK
 
 using ModelingToolkit
 using LowLevelParticleFilters
-using LowLevelParticleFilters: SimpleMvNormal, AbstractKalmanFilter
+using LowLevelParticleFilters: SimpleMvNormal, AbstractKalmanFilter, DAEUnscentedKalmanFilter
 using MonteCarloMeasurements
 using Distributions
 using ForwardDiff
@@ -11,6 +11,7 @@ using LinearAlgebra, Statistics
 using StaticArrays
 using RecipesBase
 using ModelingToolkit: generate_control_function, build_explicit_observed_function
+import ModelingToolkit: parameters
 
 export StateEstimationProblem, StateEstimationSolution, get_filter, propagate_distribution, EstimatedOutput, KalmanFilter
 
@@ -28,7 +29,10 @@ struct StateEstimationProblem
     ny::Int
     nw::Int
     na::Int
+    x_inds::Vector{Int}
+    a_inds::Vector{Int}
     f
+    f_cont
     g
     ps
     p
@@ -59,6 +63,7 @@ A structure representing a state-estimation problem.
 - `σ0`: The standard deviation of the initial state. This is used when `x0map` is not provided or when the values in `x0map` are scalars.
 - `pmap`: A dictionary mapping symbolic variables to their values. If a variable is not provided, it is assumed to be initialized to zero.
 - `init`: If `true`, the initial state is computed using an initialization problem. If `false`, the initial state is computed using the `get_u0` function.
+- `warn_initialize_determined`: Passed on to the internal `InitializationProblem`/`ODEProblem` construction, default matches MTK's `true`.
 - `xscalemap`: A dictionary mapping state variables to scaling factors. This is used to scale the state variables during integration to improve numerical stability. If a variable is not provided, it is assumed to have a scaling factor of 1.0. If provided, `discretization` is a function with signature `discretization(f_cont, Ts, x_inds, alg_inds, nu, scale_x)` where `scale_x` is a vector of scaling factors for the state variables.
 
 ## Usage:
@@ -71,7 +76,7 @@ sol       = StateEstimationSolution(filtersol, prob)   # Package into higher-lev
 plot(sol, idxs=[prob.state; prob.outputs; prob.inputs]) # Plot the solution
 ```
 """
-function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, discretization, Ts, df, dg, x0map=[], pmap=[], σ0 = 1e-4, init=false, static=true, split = false, simplify=false, force_SA=true, xscalemap = nothing, kwargs...)
+function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, discretization, Ts, df, dg, x0map=[], pmap=[], σ0 = 1e-4, init=false, static=true, split = false, simplify=false, force_SA=true, xscalemap = nothing, warn_initialize_determined=true, kwargs...)
 
     # We always generate two versions of the dynamics function, the difference between them is that one has a signature augmented with disturbance inputs w, f(x,u,p,t,w), and the other does not, f(x,u,p,t).
     # The particular filter used for estimation dictates which version of the dynamics function will be used.
@@ -120,14 +125,14 @@ function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, disc
     inputmap = Dict([inputs .=> 0.0; disturbance_inputs .=> 0.0]) # Ensure inputs are initialized to zero if not provided
     op = merge(inputmap, op, pmap)
     if init
-        initprob = ModelingToolkit.InitializationProblem(iosys, 0.0, op)
+        initprob = ModelingToolkit.InitializationProblem(iosys, 0.0, op; warn_initialize_determined)
         initsol = solve(initprob)
         # Read parameters from the solution, not the problem: initialization may solve
         # for parameter values, in which case initprob.ps[p] returns the pre-solve guess.
         p = Tuple(initsol.ps[p] for p in ps)
         x0 = SVector{nx}(initsol[x_sym])
     else
-        prob = ModelingToolkit.ODEProblem(iosys, op, (0.0, Ts))
+        prob = ModelingToolkit.ODEProblem(iosys, op, (0.0, Ts); warn_initialize_determined)
         x0 = SVector{nx}(prob.u0)
         p0 = prob.p
         # x0 = SVector{nx}(ModelingToolkit.get_u0(iosys, op))
@@ -155,7 +160,7 @@ function StateEstimationProblem(model, inputs, outputs; disturbance_inputs, disc
 
     names = SignalNames(x = string.(x_sym), u = string.(inputs), y = string.(outputs), name = "")
 
-    StateEstimationProblem(model, iosys, inputs, outputs, disturbance_inputs, x_sym, nx, nu, ny, nw, na, f_disc, g.f_oop, ps, p, df, dg, d0, Ts, names)
+    StateEstimationProblem(model, iosys, inputs, outputs, disturbance_inputs, x_sym, nx, nu, ny, nw, na, x_inds, a_inds, f_disc, f_cont, g.f_oop, ps, p, df, dg, d0, Ts, names)
 end
 
 struct FCont{F,FA}
@@ -190,6 +195,104 @@ end
 
 function get_filter(prob::StateEstimationProblem, ::Type{UnscentedKalmanFilter}; kwargs...)
     UnscentedKalmanFilter{false,false,true,false}(prob.f, prob.g, prob.df.Σ, prob.dg.Σ, prob.d0; prob.Ts, prob.nu, prob.ny, prob.nx, prob.p, names = SignalNames(prob.names, "UKF"), kwargs...)
+end
+
+"""
+    get_filter(prob::StateEstimationProblem, ::Type{DAEUnscentedKalmanFilter}; constraint_solver, constant_R1=true, kwargs...)
+
+Instantiate a `DAEUnscentedKalmanFilter` from a state-estimation problem built around an MTK model
+with algebraic equations. The package auto-generates `get_x_z`, `build_xz`, and the algebraic
+`residual` callback from the equation/unknown splitting that MTK produced during `mtkcompile`.
+
+The user must supply:
+- `constraint_solver`: a callable `(f, z0) -> z` that solves `f(z) ≈ 0`. Typically
+  `LowLevelParticleFilters.scimlbase_solver(SimpleNewtonRaphson(); reltol=1e-12)`.
+
+The `discretization` callback passed to `StateEstimationProblem` must be a DAE-aware integrator
+such as `SeeToDee.Trapezoidal(f, Ts, x_inds, a_inds, nu)` or `SeeToDee.SimpleColloc(...)` —
+the resulting `prob.f` is forwarded directly as the DAE UKF's `dynamics`.
+
+The number of disturbance inputs `nw` may differ from the differential-state count `nx_diff`:
+
+- When `nw == nx_diff`, `prob.df.Σ` is used directly as the process-noise covariance on the
+  differential state (treated as variance-per-step). This is the natural convention when each
+  disturbance input maps 1-to-1 onto one differential state.
+- When `nw != nx_diff`, the wrapper linearizes the *continuous-time* RHS `prob.f_cont` w.r.t. the
+  disturbance inputs to obtain `Bw = ∂(f_cont)/∂w` (size `nx_diff × nw`), and uses
+  `R1_diff = Bw · prob.df.Σ · Bwᵀ` as the effective process-noise covariance on the differential
+  state. `Bw` is a "select" matrix in the typical case where each `w_i` enters one force
+  equation directly: a row of zeros for kinematic-relation states like `D(x) = vx`, and a 1 on
+  whichever input drives a given force equation. So `prob.df.Σ` keeps its variance-per-step
+  interpretation — it just gets routed onto the diff states whose RHS actually contains a
+  disturbance input. This is necessary for index-3 mechanical systems with `dim Q ≥ 2`, where
+  only the lowest-order (force) equations admit Pantelides-safe noise placement (typically
+  `nw = dim Q + 1 < nx_diff`).
+
+Initial state should be on the constraint manifold; pass `init=true` to `StateEstimationProblem`
+or provide a consistent `x0map`.
+"""
+function get_filter(prob::StateEstimationProblem, ::Type{DAEUnscentedKalmanFilter};
+                    constraint_solver, kwargs...)
+    prob.na > 0 || error("Model has no algebraic equations; use UnscentedKalmanFilter instead.")
+    nx_diff = length(prob.x_inds)
+
+    xi_sv = SVector{nx_diff}(prob.x_inds)
+    ai_sv = SVector{prob.na}(prob.a_inds)
+    nx_total = prob.nx
+
+    build_lookup = ntuple(nx_total) do i
+        j = findfirst(==(i), prob.x_inds)
+        j !== nothing ? (true, j) : (false, findfirst(==(i), prob.a_inds))
+    end
+
+    get_x_z = let xi = xi_sv, ai = ai_sv
+        xz -> (xz[xi], xz[ai])
+    end
+    build_xz = let lookup = build_lookup, n = nx_total
+        (x, z) -> SVector{n}(ntuple(i -> (@inbounds (lookup[i][1] ? x[lookup[i][2]] : z[lookup[i][2]])), n))
+    end
+    residual = let f_cont = prob.f_cont, ai = ai_sv, bxz = build_xz
+        (x, z, u, p, t) -> f_cont(bxz(x, z), u, p, t)[ai]
+    end
+
+    xz0 = mean(prob.d0)
+    # When nw == nx_diff, use df.Σ directly as the state-noise covariance per step.
+    # When they differ, project disturbance-input noise onto the differential state
+    # via the discretized dynamics Jacobian Bw = ∂(prob.f)/∂w evaluated at the IC.
+    R1_diff = if prob.nw == nx_diff
+        prob.df.Σ
+    else
+        w0 = SVector(zeros(prob.nw)...)
+        # Use the CONTINUOUS-time noise gain Bw = ∂(f_cont)/∂w, not the discrete
+        # one ∂(f_disc)/∂w ≈ Ts·∂(f_cont)/∂w. With the discrete Jacobian,
+        # Bw·R1·Bw' picks up a Ts² factor that collapses the effective state
+        # noise. The continuous gain treats prob.df.Σ as the per-step variance
+        # of the disturbance input — matching the nw==nx_diff convention where
+        # df.Σ is used directly as the state-noise covariance per step. The
+        # continuous form also makes Bw a simple "select" matrix (entry 1
+        # where w_i appears in D(state_j) — entry 0 elsewhere), so the
+        # projection puts R1's variance directly on the relevant diff states.
+        Bw = ForwardDiff.jacobian(w -> prob.f_cont(eltype(w).(xz0), zeros(prob.nu), prob.p, 0.0, w)[xi_sv], w0)
+        M = Bw * prob.df.Σ * Bw'
+        # Symmetrize (StaticArrays cholesky enforces exact Hermitian, and the
+        # triple product picks up floating-point asymmetry on the order of
+        # eps()·norm(M)). When nw < nx_diff the projection is rank-deficient
+        # (rank ≤ nw); add a small diagonal regularizer to keep it strictly PD
+        # so the filter's cholesky succeeds. ε is scaled to the trace so it's
+        # imperceptible relative to the physical noise.
+        Msym = (M + M') / 2
+        ε = sqrt(eps(eltype(Msym))) * tr(Msym) / nx_diff
+        Msym + ε * I
+    end
+    Σ_diff = prob.d0.Σ[xi_sv, xi_sv]
+    d0_diff = SimpleMvNormal(xz0[xi_sv], Σ_diff)
+
+    DAEUnscentedKalmanFilter(prob.f, prob.g, residual, get_x_z, build_xz,
+                             R1_diff, prob.dg.Σ, d0_diff;
+                             xz0, nu=prob.nu, ny=prob.ny, Ts=prob.Ts, p=prob.p,
+                             constraint_solver,
+                             names = SignalNames(prob.names, "DAEUKF"),
+                             kwargs...)
 end
 
 
@@ -267,6 +370,41 @@ function (gg::EstimatedOutput)(xR::SimpleMvNormal, u, p = gg.kf.p, t = gg.kf.t, 
     propagate_distribution(gg.g, gg.kf, xR, u, p, t, args...; kwargs...)
 end
 
+# For a DAE-UKF solution, `sol.xt`/`sol.Rt` store only the differential
+# sub-state (length nx_diff, ordered by `prob.x_inds`); the algebraic variables are
+# recovered from the differential ones through the model constraint. So that a
+# `StateEstimationSolution` can index *any* variable or expression (not just the
+# differential slice), reconstruct the full state trajectory: the mean by
+# solving the constraint at the differential mean (warm-started so the
+# constraint solver stays on a single branch), and the full covariance by
+# pushing the differential `(xt, Rt)` through that same reconstruction map with
+# the unscented transform. Because the algebraic variables are deterministic
+# functions of the differential ones the full covariance is rank-deficient
+# (rank ≤ nx_diff), so a trace-scaled diagonal regularizer keeps it strictly
+# positive-definite for downstream cholesky-based output propagation — mirroring
+# the convention used in `get_filter`.
+function _reconstruct_full_state(prob, sol, f::DAEUnscentedKalmanFilter, xt, Rt)
+    timevec = range(0, step=f.Ts, length=length(xt))
+    solve_alg(xd, u, t, zseed) =
+        f.constraint_solver(zz -> f.residual(xd, zz, u, f.p, t), zseed)
+    xt_full = similar(xt, typeof(f.xz))
+    Rt_full = Vector{Any}(undef, length(xt))
+    z = SVector{prob.na}(prob.d0.μ[prob.a_inds])
+    for k in eachindex(xt)
+        u, tk = sol.u[k], timevec[k]
+        z = solve_alg(xt[k], u, tk, z)               # warm-started mean solve
+        xt_full[k] = f.build_xz(xt[k], z)
+        sps = LowLevelParticleFilters.sigmapoints(xt[k], Rt[k], f.weight_params; cholesky! = f.cholesky!)
+        xzs = [f.build_xz(sp, solve_alg(sp, u, tk, z)) for sp in sps]
+        m   = LowLevelParticleFilters.mean_with_weights(weighted_mean, xzs, f.weight_params)
+        S   = LowLevelParticleFilters.cov_with_weights(weighted_cov, xzs, m, f.weight_params)
+        S = LowLevelParticleFilters.symmetrize(S)
+        ε   = sqrt(eps(eltype(S))) * tr(S) / prob.nx
+        Rt_full[k] = S + ε*I
+    end
+    return xt_full, identity.(Rt_full)
+end
+
 function Base.getindex(osol::StateEstimationSolution, sym; dist=false, Nsamples::Int = 1, inds=eachindex(osol.sol.xt))
     prob = osol.prob
     sol = osol.sol
@@ -274,6 +412,13 @@ function Base.getindex(osol::StateEstimationSolution, sym; dist=false, Nsamples:
     smoothing = osol.sol isa LowLevelParticleFilters.KalmanSmoothingSolution
     xt = smoothing ? sol.xT : sol.xt
     Rt = smoothing ? sol.RT : sol.Rt
+    # The DAE-UKF stores only the differential sub-state; reconstruct the full
+    # state (mean + covariance) so the symbolic indexing below — which assumes
+    # `xt` is ordered like `prob.state` and feeds the full state to `g` — works
+    # for algebraic states and arbitrary expressions too.
+    if f isa DAEUnscentedKalmanFilter
+        xt, Rt = _reconstruct_full_state(prob, sol, f, xt, Rt)
+    end
     if !dist
         i = findfirst(isequal(sym), prob.state)
         if i !== nothing
@@ -358,7 +503,11 @@ function propagate_distribution(f, kf::ExtendedKalmanFilter, x, args...; kwargs.
     return SimpleMvNormal(my, Sy)
 end
 
-function propagate_distribution(f, kf::UnscentedKalmanFilter, x, args...; kwargs...)
+function propagate_distribution(f, kf::LowLevelParticleFilters.AbstractUnscentedKalmanFilter, x, args...; kwargs...)
+    # Covers both the plain UnscentedKalmanFilter and the DAEUnscentedKalmanFilter
+    # — the sigma-point propagation only needs `weight_params` and `cholesky!`,
+    # which both carry. For the DAE case `x` is the full reconstructed state
+    # distribution produced by `_reconstruct_full_state`.
     hasproperty(x, :μ) || error("Expected x to be a MvNormal or SimpleMvNormal")
     m,S = mean(x), cov(x)
     xs = LowLevelParticleFilters.sigmapoints(m, S, kf.weight_params; cholesky! = kf.cholesky!)
@@ -418,6 +567,7 @@ Construct a Kalman filter for a linear MTK ODESystem. No check is performed to v
 - `parametric_R1`: If `true`, the `R1` field of the returned filter is a function of `(x,u,p,t)`, otherwise it is a matrix that is evaluated at the `x0map, pmap` values.
 - `parametric_R2`: If `true`, the `R2` field of the returned filter is a function of `(x,u,p,t)`, otherwise it is a matrix that is evaluated at the `x0map, pmap` values.
 - `tuplify`: If `true`, the parameter vector `p` is returned as a tuple instead of an array. This can improve performance for filters with a small number of parameters of heterogeneous types.
+- `warn_initialize_determined`: Passed on to the internal `InitializationProblem` construction, see [`StateEstimationProblem`](@ref).
 - `kwargs`: Additional keyword arguments passed to `mtkcompile`.
 """
 function LowLevelParticleFilters.KalmanFilter(model::System, inputs, outputs; disturbance_inputs, Ts, R1, R2, x0map=[], pmap=[], σ0 = 1e-4, init=false, static=true, split = true, simplify=true, discretize = true, tuplify = true,
@@ -427,6 +577,7 @@ function LowLevelParticleFilters.KalmanFilter(model::System, inputs, outputs; di
     parametricD = false,
     parametricR1 = false,
     parametricR2 = false,
+    warn_initialize_determined = true,
     kwargs...)
 
     # We always generate two versions of the dynamics function, the difference between them is that one has a signature augmented with disturbance inputs w, f(x,u,p,t,w), and the other does not, f(x,u,p,t).
@@ -499,7 +650,7 @@ function LowLevelParticleFilters.KalmanFilter(model::System, inputs, outputs; di
     inputmap = Dict(all_inputs .=> 0.0) # Ensure inputs are initialized to zero if not provided
     op = merge(inputmap, op, pmap)
     if init
-        initprob = ModelingToolkit.InitializationProblem(iosys, 0.0, op)
+        initprob = ModelingToolkit.InitializationProblem(iosys, 0.0, op; warn_initialize_determined)
         initsol = solve(initprob)
         # Read parameters from the solution, not the problem: initialization may solve
         # for parameter values, in which case initprob.ps[p] returns the pre-solve guess.
@@ -612,7 +763,7 @@ function LowLevelParticleFilters.KalmanFilter(model::System, inputs, outputs; di
         end
     end
 
-    prob = StateEstimationProblem(model, inputs, outputs; disturbance_inputs, discretization = (f_cont, Ts, x_inds, a_inds, nu)->f_cont, Ts, df = SimpleMvNormal(zeros(nw), I(nw)), dg = SimpleMvNormal(zeros(ny), I(ny)), x0map, pmap, σ0, init, static, split, simplify, force_SA, kwargs...)
+    prob = StateEstimationProblem(model, inputs, outputs; disturbance_inputs, discretization = (f_cont, Ts, x_inds, a_inds, nu)->f_cont, Ts, df = SimpleMvNormal(zeros(nw), I(nw)), dg = SimpleMvNormal(zeros(ny), I(ny)), x0map, pmap, σ0, init, static, split, simplify, force_SA, warn_initialize_determined, kwargs...)
 
     (; kf=KalmanFilter(A, B, C, D, R1, R2, d0; Ts, nu, ny, nx, p, names), x_sym, ps, iosys, mats, prob)
 
