@@ -1,7 +1,7 @@
 name = "LowLevelParticleFiltersMTK"
 uuid = "6906b499-63f5-4dd8-acfd-28b0f8b24f7d"
-authors = ["Fredrik Bagge Carlson"]
 version = "0.2.11"
+authors = ["Fredrik Bagge Carlson"]
 
 [deps]
 Distributions = "31c24e10-a181-5473-b8eb-7969acd0382f"
@@ -21,7 +21,7 @@ LowLevelParticleFilters = "3.29.5"
 ModelingToolkit = "11"
 MonteCarloMeasurements = "1.4.5"
 RecipesBase = "1.3.4"
-SciMLBase = "2.153.1"
+SciMLBase = "2.153.1, 3"
 SeeToDee = "1.11.0"
 SimpleNonlinearSolve = "2.11.0"
 StaticArrays = "1.9.13"
