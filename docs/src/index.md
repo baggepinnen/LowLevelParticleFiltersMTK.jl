@@ -44,6 +44,8 @@ The workflow can be summarized as follows
 6. Analyze the solution object using, e.g., `sol[var], plot(sol), plot(sol, idxs=[var1, var2])` etc.
 7. Profit from your newly derived insight.
 
+Model parameters and noise covariances can be estimated from data using [`remake`](@ref) and [`parameter_setter`](@ref), see [Parameter and covariance estimation](@ref).
+
 As you can see, the workflow is similar to the standard MTK workflow, but contains a few more manual steps, notably the instantiation of the filter in step 3. and the manual wrapping of the solution object in step 5. The design is made this way since state estimation does not fit neatly into a problem->solve framework, in particular, one may have measurements arriving at irregular intervals, partial measurements, custom modifications of the covariance of the estimator etc. For simple cases where batch filtering (offline) is applicable, the function [`LowLevelParticleFilters.forward_trajectory`](https://baggepinnen.github.io/LowLevelParticleFilters.jl/dev/api/#LowLevelParticleFilters.forward_trajectory) produces the required `KalmanFilteringSolution` object that can be wrapped in a `StateEstimationSolution` object. Situations that demand more flexibility instead require the user to manually construct this solution object, in which case inspecting the implementation of `LowLevelParticleFilters.forward_trajectory` and modifying it to suit your needs is a good starting point. An example of this is demonstrated in the tutorial [fault detection](https://baggepinnen.github.io/LowLevelParticleFilters.jl/dev/fault_detection/).
 
 ## Example
@@ -77,7 +79,7 @@ D = ModelingToolkit.D_nounits
         y ~ x
     ]
 
-    return ODESystem(equations, t; name)
+    return System(equations, t; name)
 end
 
 @named model = SimpleSys()  # Do not use @mtkbuild here
