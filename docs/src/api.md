@@ -11,3 +11,9 @@
 Modules = [LowLevelParticleFiltersMTK]
 Private = false
 ```
+
+## Other types
+
+```@docs
+LowLevelParticleFiltersMTK.ParameterSetter
+```

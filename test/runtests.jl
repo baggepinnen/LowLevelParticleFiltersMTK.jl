@@ -231,4 +231,9 @@ end
     include("test_linear.jl")
 end
 
+@testset "remake and parameter estimation" begin
+    @info "Testing remake and parameter estimation"
+    include("test_remake.jl")
+end
+
 # end

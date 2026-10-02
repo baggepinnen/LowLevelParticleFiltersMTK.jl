@@ -12,8 +12,11 @@ using StaticArrays
 using RecipesBase
 using ModelingToolkit: generate_control_function, build_explicit_observed_function
 import ModelingToolkit: parameters
+import SciMLBase
+using SciMLBase: remake
 
 export StateEstimationProblem, StateEstimationSolution, get_filter, propagate_distribution, EstimatedOutput, KalmanFilter
+export remake, parameter_setter, get_parameters
 
 ModelingToolkit.parameters(f::LowLevelParticleFilters.AbstractFilter) = LowLevelParticleFilters.parameters(f)
 
@@ -171,34 +174,230 @@ end
 (f::FCont)(x,u,p,t,w) = f.fa(x,u,p,t,w)
 
 
+# ==============================================================================
+## Modification of problems and parameter objects
+# ==============================================================================
+
+_numeric_eltype(x::Number) = typeof(x)
+_numeric_eltype(x::AbstractArray{<:Number}) = eltype(x)
+_numeric_eltype(x::Tuple) = mapreduce(_numeric_eltype, promote_type, x; init=Union{})
+_numeric_eltype(x) = Union{}
+
+_cov_eltype(d) = hasproperty(d, :Σ) ? eltype(d.Σ) : Union{}
+
 """
-    get_filter(prob::StateEstimationProblem, ::Type{ExtendedKalmanFilter}; constant_R1=true, kwargs)
-    get_filter(prob::StateEstimationProblem, ::Type{UnscentedKalmanFilter}; kwargs)
+    remake(prob::StateEstimationProblem; p = prob.p, df = prob.df, dg = prob.dg, d0 = nothing)
+
+Return a copy of `prob` with the parameter object `p`, the dynamics-noise distribution `df`, the measurement-noise distribution `dg` and the initial-state distribution `d0` replaced. No symbolic processing or code generation is performed, the generated functions `prob.f`, `prob.f_cont` and `prob.g` are reused. This makes `remake` suitable for use inside cost functions for parameter and covariance estimation, see [`parameter_setter`](@ref) for construction of `p`.
+
+If `d0 === nothing` (the default), the initial-state distribution `prob.d0` is reused, with its mean and covariance converted to the element type obtained by promoting the element types of `prob.d0`, `df.Σ`, `dg.Σ` and the numeric entries of `p`. This conversion is required when, e.g., `p` contains `ForwardDiff.Dual` numbers, since the filters take the numeric type of their internal state from `d0`. Static arrays are preserved. An explicitly provided `d0` is used as given.
+
+The sample interval `Ts` cannot be changed by `remake` since it is part of the discretized dynamics `prob.f`; construct a new problem to change it.
+
+# Pitfalls
+- The mean of `prob.d0` is not recomputed when `p` changes. If the problem was constructed with `init = true`, the initial state solved for during initialization corresponds to the original parameters. Provide a new `d0`, widen the initial covariance, or construct a new problem if the initial state depends on the parameters.
+- Parameters solved for during initialization (parameters with binding `missing`) are not recomputed by `remake`, their values in `p` are used as given.
+- Bound parameters, i.e., parameters defined as expressions of other parameters, are not part of `p`. They are computed by the generated code and are thus recomputed from the entries of `p`.
+"""
+function SciMLBase.remake(prob::StateEstimationProblem; p = prob.p, df = prob.df, dg = prob.dg, d0 = nothing)
+    if d0 === nothing
+        d00 = prob.d0
+        T = promote_type(eltype(d00.μ), eltype(d00.Σ), _cov_eltype(df), _cov_eltype(dg), _numeric_eltype(p))
+        d0 = if T === eltype(d00.μ) && T === eltype(d00.Σ)
+            d00
+        else
+            SimpleMvNormal(T.(d00.μ), T.(d00.Σ))
+        end
+    end
+    StateEstimationProblem(prob.model, prob.iosys, prob.inputs, prob.outputs, prob.disturbance_inputs, prob.state, prob.nx, prob.nu, prob.ny, prob.nw, prob.na, prob.x_inds, prob.a_inds, prob.f, prob.f_cont, prob.g, prob.ps, p, df, dg, d0, prob.Ts, prob.names)
+end
+
+
+"""
+    ParameterSetter
+
+Callable object returned by [`parameter_setter`](@ref). `setter(θ)` returns a parameter object with the entries corresponding to the symbols `setter.syms` replaced by the entries of `θ`.
+"""
+struct ParameterSetter{IDX, P, S}
+    p0::P
+    syms::S
+    inds::Vector{Int}
+end
+
+function Base.show(io::IO, s::ParameterSetter)
+    print(io, "ParameterSetter(", s.syms, ")")
+end
+
+_isarraysym(s) = ModelingToolkit.symbolic_type(s) isa ModelingToolkit.SymbolicIndexingInterface.ArraySymbolic
+
+function _is_array_element(s)
+    Symbolics.iscall(s) && Symbolics.operation(s) === getindex
+end
+
+_isin(s, collection) = any(x -> isequal(Symbolics.unwrap(x), s), collection)
+
+function _parameter_index(prob::StateEstimationProblem, sym)
+    s = Symbolics.unwrap(sym)
+    i = findfirst(x -> isequal(Symbolics.unwrap(x), s), prob.ps)
+    if i !== nothing
+        _isarraysym(s) && throw(ArgumentError("The parameter $s is array-valued. Array-valued parameters are not supported, declare scalar parameters instead."))
+        return i
+    end
+    iosys = prob.iosys
+    if _is_array_element(s)
+        throw(ArgumentError("The symbol $s is an element of an array-valued parameter. Array-valued parameters are not supported, declare scalar parameters instead."))
+    end
+    bp = ModelingToolkit.bound_parameters(iosys)
+    if _isin(s, bp)
+        binding = get(ModelingToolkit.bindings(iosys), s, nothing)
+        bstr = binding === nothing ? "" : " (bound to $binding)"
+        throw(ArgumentError("The parameter $s is a bound parameter$bstr. Its value is computed from other parameters by the generated code and it is not part of the parameter object. Set the parameters it depends on instead."))
+    end
+    if _isin(s, prob.inputs)
+        throw(ArgumentError("The symbol $s is an input of the problem, not a parameter. Inputs are provided to the filter through the input signal `u`."))
+    end
+    if _isin(s, prob.disturbance_inputs)
+        throw(ArgumentError("The symbol $s is a disturbance input of the problem, not a parameter. The distribution of the disturbance inputs is given by `df`, use `remake(prob; df)` to change it."))
+    end
+    if _isin(s, prob.state)
+        throw(ArgumentError("The symbol $s is a state variable of the problem, not a parameter. The distribution of the initial state is given by `d0`, use `remake(prob; d0)` to change it."))
+    end
+    if _isin(s, ModelingToolkit.observables(iosys))
+        throw(ArgumentError("The symbol $s is an observed variable of the problem, not a parameter."))
+    end
+    # A symbol obtained from a model that was not completed is namespaced with the name of the model
+    name = string(s)
+    if occursin('₊', name)
+        stripped = split(name, '₊'; limit=2)[2]
+        j = findfirst(x -> string(x) == stripped, prob.ps)
+        if j !== nothing
+            throw(ArgumentError("The symbol $s was not found among the parameters of the problem, but the parameter $(prob.ps[j]) was. The symbol was likely obtained from a model that was not completed, refer to the parameter as `complete(model).$stripped` instead."))
+        end
+    end
+    throw(ArgumentError("The symbol $s was not found among the parameters of the problem, prob.ps = $(prob.ps). The parameter may have been eliminated during structural simplification, or the symbol may have been obtained from a model that was not completed, in which case the parameter has to be referred to through `complete(model)`."))
+end
+
+function _parameter_indices(prob::StateEstimationProblem, syms)
+    p = prob.p
+    p isa Union{Tuple, AbstractVector} || throw(ArgumentError("The parameter object `prob.p` must be a `Tuple` or an `AbstractVector`, got $(typeof(p)). Parameter objects of other types are obtained when the problem is constructed with `split = true`, construct the problem with `split = false` (the default) instead."))
+    syms = syms isa Union{AbstractVector, Tuple} ? collect(syms) : [syms]
+    for (j, s) in enumerate(syms)
+        for k in 1:j-1
+            isequal(Symbolics.unwrap(syms[k]), Symbolics.unwrap(s)) && throw(ArgumentError("The symbol $s appears more than once in `syms`."))
+        end
+    end
+    inds = Int[_parameter_index(prob, s) for s in syms]
+    ps = prob.ps
+    length(p) >= length(ps) || throw(ArgumentError("The parameter object `prob.p` has length $(length(p)), which is smaller than the number of parameters length(prob.ps) = $(length(ps)). The correspondence between `prob.p` and `prob.ps` cannot be established."))
+    # The entries of p correspond to the entries of ps only if array-valued parameters are not flattened into p
+    for k in 1:(isempty(inds) ? 0 : maximum(inds))
+        if _isarraysym(Symbolics.unwrap(ps[k])) && !(p[k] isa AbstractArray)
+            throw(ArgumentError("The parameter object `prob.p` stores the array-valued parameter $(ps[k]) in flattened form, the correspondence between `prob.p` and `prob.ps` cannot be established. Array-valued parameters are not supported, declare scalar parameters instead."))
+        end
+    end
+    syms, inds
+end
+
+"""
+    setter = parameter_setter(prob::StateEstimationProblem, syms)
+    p = setter(θ)
+
+Return a callable object that maps a parameter vector `θ` to a parameter object for `prob`. The returned parameter object is a copy of `prob.p` with the entries corresponding to the symbolic parameters `syms` replaced by the corresponding entries of `θ`, such that `length(θ) == length(syms)`. The result is intended to be passed to [`remake`](@ref) or to the `p` keyword of [`get_filter`](@ref), e.g.,
+```julia
+setter = parameter_setter(prob, [cmodel.c, cmodel.k])
+filt = get_filter(remake(prob; p = setter(θ)), UnscentedKalmanFilter)
+```
+
+The returned parameter object has the same container type as `prob.p`. If `prob.p` is a `Tuple` (the default), the entries that are not replaced are kept as they are, and the replaced entries take the types of the entries of `θ`, which makes the setter suitable for use with automatic differentiation, e.g., using `ForwardDiff`. The construction of the tuple is type stable. If `prob.p` is an `AbstractVector`, a copy with the element type promoted to accommodate the entries of `θ` is returned.
+
+The symbols in `syms` are given as symbolic variables of the completed model, e.g., `complete(model).k`. Bound parameters (parameters defined as expressions of other parameters), inputs, disturbance inputs, state variables, observed variables and array-valued parameters are not supported and result in an `ArgumentError`. Bound parameters are recomputed from the parameters they depend on by the generated code.
+
+See also [`get_parameters`](@ref) to obtain the current values of the parameters, e.g., as an initial guess for `θ`.
+"""
+function parameter_setter(prob::StateEstimationProblem, syms)
+    syms, inds = _parameter_indices(prob, syms)
+    p0 = prob.p
+    if p0 isa Tuple
+        IDX = ntuple(length(p0)) do i
+            j = findfirst(==(i), inds)
+            j === nothing ? 0 : j
+        end
+    else
+        IDX = nothing
+    end
+    ParameterSetter{IDX, typeof(p0), typeof(syms)}(p0, syms, inds)
+end
+
+"""
+    get_parameters(prob::StateEstimationProblem, syms)
+
+Return a vector containing the current values of the parameters `syms` in `prob.p`. The result is, e.g., useful as an initial guess for the parameter vector `θ` passed to a setter obtained from [`parameter_setter`](@ref). The same restrictions on `syms` as for `parameter_setter` apply.
+"""
+function get_parameters(prob::StateEstimationProblem, syms)
+    _, inds = _parameter_indices(prob, syms)
+    [prob.p[i] for i in inds]
+end
+
+@noinline function _throw_length_mismatch(s::ParameterSetter, θ)
+    throw(ArgumentError("The parameter vector has length $(length(θ)), but the setter was constructed for $(length(s.inds)) parameters $(s.syms)."))
+end
+
+function (s::ParameterSetter)(θ)
+    length(θ) == length(s.inds) || _throw_length_mismatch(s, θ)
+    _set_parameters(s, θ)
+end
+
+@generated function _set_parameters(s::ParameterSetter{IDX, <:Tuple}, θ) where IDX
+    exprs = [IDX[i] == 0 ? :(p0[$i]) : :(θ[$(IDX[i])]) for i in eachindex(IDX)]
+    quote
+        p0 = s.p0
+        tuple($(exprs...))
+    end
+end
+
+function _set_parameters(s::ParameterSetter{nothing, <:AbstractVector}, θ)
+    T = promote_type(eltype(s.p0), _numeric_eltype(θ))
+    p = similar(s.p0, T)
+    copyto!(p, s.p0)
+    for (j, i) in enumerate(s.inds)
+        p[i] = θ[j]
+    end
+    p
+end
+
+
+"""
+    get_filter(prob::StateEstimationProblem, ::Type{ExtendedKalmanFilter}; p = prob.p, constant_R1=true, kwargs)
+    get_filter(prob::StateEstimationProblem, ::Type{UnscentedKalmanFilter}; p = prob.p, kwargs)
 
 Instantiate a filter from a state-estimation problem. `kwargs` are sent to the filter constructor.
 
-If `constant_R1=true`, the dynamics noise covariance matrix `R1` is assumed to be constant and is computed at the initial state. Otherwise, `R1` is computed at each time step throug repeated linearization w.r.t. the disturbance inputs `w`.
+The parameter object `p` is stored in the filter and defaults to `prob.p`. For the `ExtendedKalmanFilter` with `constant_R1=true`, `p` is also used to compute the constant `R1`. The keyword `p` does not affect the initial-state distribution `prob.d0`, from which the filter takes the numeric type of its internal state. If `p` contains, e.g., `ForwardDiff.Dual` numbers, use `get_filter(remake(prob; p), ...)` instead, see [`remake`](@ref).
+
+If `constant_R1=true`, the dynamics noise covariance matrix `R1` is assumed to be constant and is computed as ``R_1 = B_w Σ_w B_w^T`` with ``B_w = ∂f/∂w`` evaluated at the mean of `prob.d0` and `u = 0`, where ``Σ_w`` is the covariance of `prob.df`. Otherwise, `R1` is computed at each time step through repeated linearization w.r.t. the disturbance inputs `w`.
+
+The `UnscentedKalmanFilter` propagates the disturbance inputs through the dynamics using augmented sigma points, its `R1` is the covariance of `prob.df`, of size `nw × nw`.
 """
-function get_filter(prob::StateEstimationProblem, ::Type{ExtendedKalmanFilter}; constant_R1=true, kwargs...)
+function get_filter(prob::StateEstimationProblem, ::Type{ExtendedKalmanFilter}; p = prob.p, constant_R1=true, kwargs...)
     R1mat = prob.df.Σ
     w0 = SVector(zeros(prob.nw)...) # type instability here
     R1 = function (x,u,p,t)
-        Bw = ForwardDiff.jacobian(w->prob.f(eltype(w).(x), u, p, t, w), w0)
+        Bw = ForwardDiff.jacobian(w->prob.f(promote_type(eltype(w), eltype(x)).(x), u, p, t, w), w0)
         Bw * R1mat * Bw'
     end
     if constant_R1
-        R1c = R1(mean(prob.d0), zeros(prob.nu), prob.p, 0.0)
+        R1c = R1(mean(prob.d0), zeros(prob.nu), p, 0.0)
         R1 = R1c
     end
-    ExtendedKalmanFilter(prob.f, prob.g, R1, prob.dg.Σ, prob.d0; prob.Ts, prob.nu, prob.ny, prob.nx, prob.p, names = SignalNames(prob.names, "EKF"), kwargs...)
+    ExtendedKalmanFilter(prob.f, prob.g, R1, prob.dg.Σ, prob.d0; prob.Ts, prob.nu, prob.ny, prob.nx, p, names = SignalNames(prob.names, "EKF"), kwargs...)
 end
 
-function get_filter(prob::StateEstimationProblem, ::Type{UnscentedKalmanFilter}; kwargs...)
-    UnscentedKalmanFilter{false,false,true,false}(prob.f, prob.g, prob.df.Σ, prob.dg.Σ, prob.d0; prob.Ts, prob.nu, prob.ny, prob.nx, prob.p, names = SignalNames(prob.names, "UKF"), kwargs...)
+function get_filter(prob::StateEstimationProblem, ::Type{UnscentedKalmanFilter}; p = prob.p, kwargs...)
+    UnscentedKalmanFilter{false,false,true,false}(prob.f, prob.g, prob.df.Σ, prob.dg.Σ, prob.d0; prob.Ts, prob.nu, prob.ny, prob.nx, p, names = SignalNames(prob.names, "UKF"), kwargs...)
 end
 
 """
-    get_filter(prob::StateEstimationProblem, ::Type{DAEUnscentedKalmanFilter}; constraint_solver, constant_R1=true, kwargs...)
+    get_filter(prob::StateEstimationProblem, ::Type{DAEUnscentedKalmanFilter}; constraint_solver, p = prob.p, kwargs...)
 
 Instantiate a `DAEUnscentedKalmanFilter` from a state-estimation problem built around an MTK model
 with algebraic equations. The package auto-generates `get_x_z`, `build_xz`, and the algebraic
@@ -211,6 +410,9 @@ The user must supply:
 The `discretization` callback passed to `StateEstimationProblem` must be a DAE-aware integrator
 such as `SeeToDee.Trapezoidal(f, Ts, x_inds, a_inds, nu)` or `SeeToDee.SimpleColloc(...)` —
 the resulting `prob.f` is forwarded directly as the DAE UKF's `dynamics`.
+
+The parameter object `p` defaults to `prob.p`. It is stored in the filter and used to compute
+`Bw` below. See [`remake`](@ref) for replacement of the parameters of the problem.
 
 The number of disturbance inputs `nw` may differ from the differential-state count `nx_diff`:
 
@@ -232,7 +434,7 @@ Initial state should be on the constraint manifold; pass `init=true` to `StateEs
 or provide a consistent `x0map`.
 """
 function get_filter(prob::StateEstimationProblem, ::Type{DAEUnscentedKalmanFilter};
-                    constraint_solver, kwargs...)
+                    constraint_solver, p = prob.p, kwargs...)
     prob.na > 0 || error("Model has no algebraic equations; use UnscentedKalmanFilter instead.")
     nx_diff = length(prob.x_inds)
 
@@ -272,7 +474,7 @@ function get_filter(prob::StateEstimationProblem, ::Type{DAEUnscentedKalmanFilte
         # continuous form also makes Bw a simple "select" matrix (entry 1
         # where w_i appears in D(state_j) — entry 0 elsewhere), so the
         # projection puts R1's variance directly on the relevant diff states.
-        Bw = ForwardDiff.jacobian(w -> prob.f_cont(eltype(w).(xz0), zeros(prob.nu), prob.p, 0.0, w)[xi_sv], w0)
+        Bw = ForwardDiff.jacobian(w -> prob.f_cont(promote_type(eltype(w), eltype(xz0)).(xz0), zeros(prob.nu), p, 0.0, w)[xi_sv], w0)
         M = Bw * prob.df.Σ * Bw'
         # Symmetrize (StaticArrays cholesky enforces exact Hermitian, and the
         # triple product picks up floating-point asymmetry on the order of
@@ -289,7 +491,7 @@ function get_filter(prob::StateEstimationProblem, ::Type{DAEUnscentedKalmanFilte
 
     DAEUnscentedKalmanFilter(prob.f, prob.g, residual, get_x_z, build_xz,
                              R1_diff, prob.dg.Σ, d0_diff;
-                             xz0, nu=prob.nu, ny=prob.ny, Ts=prob.Ts, p=prob.p,
+                             xz0, nu=prob.nu, ny=prob.ny, Ts=prob.Ts, p,
                              constraint_solver,
                              names = SignalNames(prob.names, "DAEUKF"),
                              kwargs...)

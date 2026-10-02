@@ -7,6 +7,7 @@ makedocs(
     modules = [LowLevelParticleFiltersMTK],
     pages = [
         "Home" => "index.md",
+        "Parameter estimation" => "parameter_estimation.md",
         "API" => "api.md",
     ],
     format = Documenter.HTML(prettyurls = haskey(ENV, "CI")),

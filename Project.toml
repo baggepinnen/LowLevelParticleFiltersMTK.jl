@@ -1,6 +1,6 @@
 name = "LowLevelParticleFiltersMTK"
 uuid = "6906b499-63f5-4dd8-acfd-28b0f8b24f7d"
-version = "0.2.12"
+version = "0.2.13"
 authors = ["Fredrik Bagge Carlson"]
 
 [deps]
@@ -11,12 +11,14 @@ LowLevelParticleFilters = "d9d29d28-c116-5dba-9239-57a5fe23875b"
 ModelingToolkit = "961ee093-0014-501f-94e3-6117800e7a78"
 MonteCarloMeasurements = "0987c9cc-fe09-11e8-30f0-b96dd679fdca"
 RecipesBase = "3cdcf5f2-1ef4-517c-9805-6587b60abb01"
+SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
 StaticArrays = "90137ffa-7385-5640-81b9-e52037218182"
 Statistics = "10745b16-79ce-11e8-11f9-7d13ad32a3b2"
 
 [compat]
 Distributions = "0.25.119"
 ForwardDiff = "0.10, 1"
+LeastSquaresOptim = "0.8"
 LowLevelParticleFilters = "3.29.5"
 ModelingToolkit = "11"
 MonteCarloMeasurements = "1.4.5"
@@ -28,11 +30,12 @@ StaticArrays = "1.9.13"
 julia = "1.10"
 
 [extras]
+LeastSquaresOptim = "0fc2ff8b-aaa3-5acd-a817-1944a5e08891"
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
-SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
 SeeToDee = "1c904df7-48cd-41e7-921b-d889ed9a470c"
 SimpleNonlinearSolve = "727e6d20-b764-4bd8-a329-72de5adea6c7"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Test", "Plots", "SeeToDee", "SimpleNonlinearSolve", "SciMLBase"]
+test = ["Test", "Plots", "SeeToDee", "SimpleNonlinearSolve", "LeastSquaresOptim", "Random"]
