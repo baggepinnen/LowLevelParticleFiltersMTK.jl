@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/><title>Parameter estimation · LowLevelParticleFiltersMTK Documentation</title><meta name="title" content="Parameter estimation · LowLevelParticleFiltersMTK Documentation"/><meta property="og:title" content="Parameter estimation · LowLevelParticleFiltersMTK Documentation"/><meta property="twitter:title" content="Parameter estimation · LowLevelParticleFiltersMTK Documentation"/><meta name="description" content="Documentation for LowLevelParticleFiltersMTK Documentation."/><meta property="og:description" content="Documentation for LowLevelParticleFiltersMTK Documentation."/><meta property="twitter:description" content="Documentation for LowLevelParticleFiltersMTK Documentation."/><script data-outdated-warner src="../assets/warner.js"></script><link href="https://cdnjs.cloudflare.com/ajax/libs/lato-font/3.0.0/css/lato-font.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/juliamono/0.63.2/juliamono.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/fontawesome.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/solid.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/brands.min.css" rel="stylesheet" type="text/css"/><link href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.8/katex.min.css" rel="stylesheet" type="text/css"/><script>documenterBaseURL=".."</script><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.3.6/require.min.js" data-main="../assets/documenter.js"></script><script src="../search_index.js"></script><script src="../siteinfo.js"></script><script src="../../versions.js"></script><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-mocha.css" data-theme-name="catppuccin-mocha"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-macchiato.css" data-theme-name="catppuccin-macchiato"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-frappe.css" data-theme-name="catppuccin-frappe"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/catppuccin-latte.css" data-theme-name="catppuccin-latte"/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-dark.css" data-theme-name="documenter-dark" data-theme-primary-dark/><link class="docs-theme-link" rel="stylesheet" type="text/css" href="../assets/themes/documenter-light.css" data-theme-name="documenter-light" data-theme-primary/><script src="../assets/themeswap.js"></script></head><body><div id="documenter"><nav class="docs-sidebar"><div class="docs-package-name"><span class="docs-autofit"><a href="../">LowLevelParticleFiltersMTK Documentation</a></span></div><button class="docs-search-query input is-rounded is-small is-clickable my-2 mx-auto py-1 px-2" id="documenter-search-query">Search docs (Ctrl + /)</button><ul class="docs-menu"><li><a class="tocitem" href="../">Home</a></li><li class="is-active"><a class="tocitem" href>Parameter estimation</a><ul class="internal"><li><a class="tocitem" href="#Model-and-data"><span>Model and data</span></a></li><li><a class="tocitem" href="#Estimation-of-plant-parameters"><span>Estimation of plant parameters</span></a></li><li><a class="tocitem" href="#Estimation-of-noise-covariances"><span>Estimation of noise covariances</span></a></li><li><a class="tocitem" href="#Joint-estimation-of-parameters-and-covariances"><span>Joint estimation of parameters and covariances</span></a></li><li><a class="tocitem" href="#Joint-state-and-parameter-estimation"><span>Joint state and parameter estimation</span></a></li><li><a class="tocitem" href="#Pitfalls"><span>Pitfalls</span></a></li></ul></li><li><a class="tocitem" href="../api/">API</a></li></ul><div class="docs-version-selector field has-addons"><div class="control"><span class="docs-label button is-static is-size-7">Version</span></div><div class="docs-selector control is-expanded"><div class="select is-fullwidth is-size-7"><select id="documenter-version-selector"></select></div></div></div></nav><div class="docs-main"><header class="docs-navbar"><a class="docs-sidebar-button docs-navbar-link fa-solid fa-bars is-hidden-desktop" id="documenter-sidebar-button" href="#"></a><nav class="breadcrumb"><ul class="is-hidden-mobile"><li class="is-active"><a href>Parameter estimation</a></li></ul><ul class="is-hidden-tablet"><li class="is-active"><a href>Parameter estimation</a></li></ul></nav><div class="docs-right"><a class="docs-navbar-link" href="https://github.com/baggepinnen/LowLevelParticleFiltersMTK.jl" title="View the repository on GitHub"><span class="docs-icon fa-brands"></span><span class="docs-label is-hidden-touch">GitHub</span></a><a class="docs-navbar-link" href="https://github.com/baggepinnen/LowLevelParticleFiltersMTK.jl/blob/main/docs/src/parameter_estimation.md" title="Edit source on GitHub"><span class="docs-icon fa-solid"></span></a><a class="docs-settings-button docs-navbar-link fa-solid fa-gear" id="documenter-settings-button" href="#" title="Settings"></a><a class="docs-article-toggle-button fa-solid fa-chevron-up" id="documenter-article-toggle-button" href="javascript:;" title="Collapse all docstrings"></a></div></header><article class="content" id="documenter-page"><h1 id="Parameter-and-covariance-estimation"><a class="docs-heading-anchor" href="#Parameter-and-covariance-estimation">Parameter and covariance estimation</a><a id="Parameter-and-covariance-estimation-1"></a><a class="docs-heading-anchor-permalink" href="#Parameter-and-covariance-estimation" title="Permalink"></a></h1><p>The model parameters and the noise covariances of a <a href="../api/#LowLevelParticleFiltersMTK.StateEstimationProblem-Tuple{Any, Any, Any}"><code>StateEstimationProblem</code></a> can be estimated from data by maximizing the likelihood of the data under a Kalman-type filter, or by minimizing its prediction errors. LowLevelParticleFilters.jl provides the cost functions and optimization utilities for this purpose, see <a href="https://baggepinnen.github.io/LowLevelParticleFilters.jl/dev/parameter_estimation/">the parameter-estimation tutorial of LowLevelParticleFilters.jl</a>. This page demonstrates their use together with a ModelingToolkit model. The following functions are used to construct filters for new parameter values without repeating the symbolic processing and code generation performed by the constructor of <a href="../api/#LowLevelParticleFiltersMTK.StateEstimationProblem-Tuple{Any, Any, Any}"><code>StateEstimationProblem</code></a>:</p><ul><li><a href="../api/#LowLevelParticleFiltersMTK.parameter_setter-Tuple{StateEstimationProblem, Any}"><code>parameter_setter</code></a><code>(prob, syms)</code> returns a function <code>setp</code> such that <code>setp(θ)</code> is a copy of the parameter object <code>prob.p</code> in which the parameters <code>syms</code> are replaced by the entries of <code>θ</code>.</li><li><a href="../api/#SciMLBase.remake-Tuple{StateEstimationProblem}"><code>remake</code></a><code>(prob; p, df, dg, d0)</code> returns a copy of <code>prob</code> with the parameter object, the noise distributions or the initial-state distribution replaced. The generated functions are reused.</li><li><a href="../api/#LowLevelParticleFiltersMTK.get_parameters-Tuple{StateEstimationProblem, Any}"><code>get_parameters</code></a><code>(prob, syms)</code> returns the current values of the parameters <code>syms</code>, e.g., for use as an initial guess.</li></ul><h2 id="Model-and-data"><a class="docs-heading-anchor" href="#Model-and-data">Model and data</a><a id="Model-and-data-1"></a><a class="docs-heading-anchor-permalink" href="#Model-and-data" title="Permalink"></a></h2><p>We consider a mass-spring-damper system with damping coefficient <span>$c$</span> and spring constant <span>$k$</span>. A disturbance force <span>$w$</span> acts on the mass, and the position of the mass is measured.</p><pre><code class="language-julia hljs">using LowLevelParticleFiltersMTK
+using LowLevelParticleFilters
+using LowLevelParticleFilters: SimpleMvNormal
+using ModelingToolkit
+using SeeToDee
+using StaticArrays
+using LinearAlgebra
+using Distributions
+using LeastSquaresOptim
+using ForwardDiff
+using Plots
+using Random
+Random.seed!(0)
+
+t = ModelingToolkit.t_nounits
+D = ModelingToolkit.D_nounits
+
+@component function MassSpringDamper(; name)
+    pars = @parameters begin
+        m = 1.0
+        c = 1.0
+        k = 1.0
+    end
+    vars = @variables begin
+        x(t) = 0.0
+        v(t) = 0.0
+        u(t) = 0.0
+        y(t)
+        w(t), [disturbance = true, input = true]
+    end
+    eqs = [
+        D(x) ~ v
+        m*D(v) ~ -k*x - c*v + u + w
+        y ~ x
+    ]
+    return System(eqs, t, vars, pars; name)
+end
+
+@named model = MassSpringDamper()
+cmodel = complete(model)
+inputs = [cmodel.u]
+outputs = [cmodel.y]
+disturbance_inputs = [cmodel.w]
+nw = length(disturbance_inputs)
+ny = length(outputs)
+Ts = 0.05
+discretization = (f, Ts, x_inds, alg_inds, nu) -&gt; SeeToDee.Rk4(f, Ts)</code></pre><p>The data is generated by a simulation of the problem with the true parameter values and noise covariances. The function <code>simulate</code> samples the disturbance inputs from <code>df</code> and the measurement noise from <code>dg</code>.</p><pre><code class="language-julia hljs">c_true, k_true = 0.5, 2.0
+σw_true, σe_true = 0.1, 0.01 # Standard deviations of the disturbance force and the measurement noise
+df_true = SimpleMvNormal(SMatrix{nw,nw}(σw_true^2*I))
+dg_true = SimpleMvNormal(SMatrix{ny,ny}(σe_true^2*I))
+prob_true = StateEstimationProblem(model, inputs, outputs; disturbance_inputs, discretization, Ts,
+    df = df_true, dg = dg_true, pmap = [cmodel.c =&gt; c_true, cmodel.k =&gt; k_true])
+
+N = 400
+timevec = range(0, step = Ts, length = N)
+u = [[sign(sin(0.7ti)) + 0.5sin(2.3ti)] for ti in timevec]
+x, u, y = simulate(get_filter(prob_true, UnscentedKalmanFilter), u)
+plot(timevec, reduce(hcat, y)&#39;, lab = &quot;y&quot;, xlabel = &quot;Time [s]&quot;)
+plot!(timevec, reduce(hcat, u)&#39;, lab = &quot;u&quot;)</code></pre><img src="87b9a454.svg" alt="Example block output"/><p>The problem used for estimation is constructed with nominal values of <span>$c$</span> and <span>$k$</span> that differ from the true values, and with nominal noise covariances.</p><pre><code class="language-julia hljs">df0 = SimpleMvNormal(SMatrix{nw,nw}(1.0I))
+dg0 = SimpleMvNormal(SMatrix{ny,ny}(0.1^2*I))
+prob = StateEstimationProblem(model, inputs, outputs; disturbance_inputs, discretization, Ts,
+    df = df0, dg = dg0, pmap = [cmodel.c =&gt; 1.0, cmodel.k =&gt; 1.0])</code></pre><h2 id="Estimation-of-plant-parameters"><a class="docs-heading-anchor" href="#Estimation-of-plant-parameters">Estimation of plant parameters</a><a id="Estimation-of-plant-parameters-1"></a><a class="docs-heading-anchor-permalink" href="#Estimation-of-plant-parameters" title="Permalink"></a></h2><p>The setter maps a vector of values of <span>$c$</span> and <span>$k$</span> to a parameter object for <code>prob</code>. The parameters are estimated in logarithmic coordinates, <code>θ = log.([c, k])</code>, which ensures that the estimated values are positive.</p><pre><code class="language-julia hljs">setp = parameter_setter(prob, [cmodel.c, cmodel.k])
+θ0 = log.(get_parameters(prob, [cmodel.c, cmodel.k]))</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2-element Vector{Float64}:
+ 0.0
+ 0.0</code></pre><p>The function <code>LowLevelParticleFilters.prediction_errors!</code> with <code>loglik = true</code> computes residuals whose sum of squares equals the negative log-likelihood of the data, up to an additive constant. The Levenberg-Marquardt algorithm from LeastSquaresOptim.jl thus computes the maximum-likelihood estimate of the parameters. For each time step, the residuals contain one entry that is the square root of <span>$\frac{1}{2}\left(\log\det S + n_y \log 2π\right)$</span>, where <span>$S$</span> is the covariance of the innovation. The <code>offset</code> is added to this quantity to keep it positive when <span>$S$</span> is small. The offset shifts the log-likelihood by a constant and does not change the minimizer.</p><pre><code class="language-julia hljs">offset = 10.0
+function residuals!(r, θ)
+    ukf = get_filter(remake(prob; p = setp(exp.(θ))), UnscentedKalmanFilter)
+    LowLevelParticleFilters.prediction_errors!(r, ukf, u, y; loglik = true, offset)
+end
+res_plant = optimize!(
+    LeastSquaresProblem(x = θ0, f! = residuals!, output_length = length(y)*(ny+1), autodiff = :forward),
+    LevenbergMarquardt(),
+)
+θ_plant = exp.(res_plant.minimizer)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2-element Vector{Float64}:
+ 0.5859775364866839
+ 2.013110324432868</code></pre><p>The estimate of <span>$k$</span> is close to the true value <code>k_true</code>. The estimate of <span>$c$</span> deviates from <code>c_true</code> since the filter uses the nominal noise covariances, see the comparison in <a href="#Joint-estimation-of-parameters-and-covariances">Joint estimation of parameters and covariances</a>. The filter stores the parameter object it was constructed with, which <code>prediction_errors!</code> uses by default. The call to <code>remake</code> performs no symbolic processing or code generation. When the Jacobian of the residuals is computed using ForwardDiff, <code>θ</code> contains dual numbers, and <code>remake</code> converts the initial-state distribution <code>prob.d0</code> to the same numeric type, since the filters take the numeric type of their internal state from <code>d0</code>.</p><p>The same construction applies to optimizers that use the gradient of a scalar cost function, such as those in Optim.jl. The gradient of the log-likelihood is obtained using ForwardDiff:</p><pre><code class="language-julia hljs">cost(θ) = -loglik(get_filter(remake(prob; p = setp(exp.(θ))), UnscentedKalmanFilter), u, y)
+ForwardDiff.gradient(cost, res_plant.minimizer)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">2-element Vector{Float64}:
+  5.0882636083438015e-6
+ -1.8121355949696216e-6</code></pre><h2 id="Estimation-of-noise-covariances"><a class="docs-heading-anchor" href="#Estimation-of-noise-covariances">Estimation of noise covariances</a><a id="Estimation-of-noise-covariances-1"></a><a class="docs-heading-anchor-permalink" href="#Estimation-of-noise-covariances" title="Permalink"></a></h2><p>The function <code>autotune_covariances</code> from LowLevelParticleFilters.jl estimates the covariances <code>R1</code> and <code>R2</code> of a filter by maximum likelihood, given a filtering solution. We estimate the covariances for the plant parameters estimated above.</p><pre><code class="language-julia hljs">prob_plant = remake(prob; p = setp(θ_plant))
+sol_plant = forward_trajectory(get_filter(prob_plant, UnscentedKalmanFilter), u, y)
+res_cov = autotune_covariances(sol_plant; show_trace = false, offset)
+res_cov.R1, res_cov.R2</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">([0.040212726938506776;;], [9.221751396254481e-5;;])</code></pre><p>The <code>UnscentedKalmanFilter</code> obtained from <a href="../api/#LowLevelParticleFiltersMTK.get_filter-Tuple{StateEstimationProblem, Type{LowLevelParticleFilters.DAEUnscentedKalmanFilter}}"><code>get_filter</code></a> propagates the disturbance inputs through the dynamics, its <code>R1</code> is thus the covariance of the disturbance inputs, <code>df.Σ</code>, of size <code>nw × nw</code>. The estimated covariances are transferred to the problem using <code>remake</code>.</p><pre><code class="language-julia hljs">prob_cov = remake(prob_plant; df = SimpleMvNormal(res_cov.R1), dg = SimpleMvNormal(res_cov.R2))
+sol_cov = forward_trajectory(get_filter(prob_cov, UnscentedKalmanFilter), u, y)
+sol_plant.ll, sol_cov.ll</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">(517.0618697273713, 1235.806103677244)</code></pre><p>The innovation sequence of the tuned filter is analyzed with <code>validationplot</code>, which requires Plots.jl and Distributions.jl to be loaded. For a correctly tuned filter, the normalized innovation squared is mostly within the bounds, and the autocorrelation of the innovation and its cross-correlation with the input are small.</p><pre><code class="language-julia hljs">validationplot(sol_cov)</code></pre><img src="e7897892.svg" alt="Example block output"/><p>The covariance of the disturbance inputs in <code>df</code> applies to all filter types. To use the tuned covariances with an <code>ExtendedKalmanFilter</code>, the covariances are transferred through <code>remake</code> and the filter is obtained from <a href="../api/#LowLevelParticleFiltersMTK.get_filter-Tuple{StateEstimationProblem, Type{LowLevelParticleFilters.DAEUnscentedKalmanFilter}}"><code>get_filter</code></a>, which computes the <code>nx × nx</code> covariance <span>$R_1 = B_w Σ_w B_w^T$</span>. The covariance <code>R1</code> of an <code>ExtendedKalmanFilter</code> should not be tuned directly: since <span>$n_w &lt; n_x$</span> in this example, <span>$B_w Σ_w B_w^T$</span> is singular, and a tuned <code>nx × nx</code> matrix does not, in general, correspond to a covariance of the disturbance inputs <code>df</code>.</p><pre><code class="language-julia hljs">ekf = get_filter(prob_cov, ExtendedKalmanFilter)
+forward_trajectory(ekf, u, y).ll</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">1235.8061036772438</code></pre><h2 id="Joint-estimation-of-parameters-and-covariances"><a class="docs-heading-anchor" href="#Joint-estimation-of-parameters-and-covariances">Joint estimation of parameters and covariances</a><a id="Joint-estimation-of-parameters-and-covariances-1"></a><a class="docs-heading-anchor-permalink" href="#Joint-estimation-of-parameters-and-covariances" title="Permalink"></a></h2><p>The plant parameters and the noise covariances can also be estimated jointly, by replacing <code>p</code>, <code>df</code> and <code>dg</code> in the same call to <code>remake</code>. The parameter vector is <code>θ = log.([c, k, σw, σe])</code>.</p><pre><code class="language-julia hljs">function residuals_joint!(r, θ)
+    c, k, σw, σe = exp.(θ)
+    probi = remake(prob; p = setp([c, k]),
+        df = SimpleMvNormal(SMatrix{nw,nw}(σw^2*I)),
+        dg = SimpleMvNormal(SMatrix{ny,ny}(σe^2*I)))
+    ukf = get_filter(probi, UnscentedKalmanFilter)
+    LowLevelParticleFilters.prediction_errors!(r, ukf, u, y; loglik = true, offset)
+end
+θ0_joint = log.([1.0, 1.0, 1.0, 0.1])
+res_joint = optimize!(
+    LeastSquaresProblem(x = θ0_joint, f! = residuals_joint!, output_length = length(y)*(ny+1), autodiff = :forward),
+    LevenbergMarquardt(),
+)
+θ_joint = exp.(res_joint.minimizer)
+θ_two_stage = [θ_plant; sqrt.(diag(res_cov.R1)); sqrt.(diag(res_cov.R2))]
+θ_true = [c_true, k_true, σw_true, σe_true]
+[θ_true θ_two_stage θ_joint]</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">4×3 Matrix{Float64}:
+ 0.5   0.585978  0.498763
+ 2.0   2.01311   2.0005
+ 0.1   0.200531  0.0966349
+ 0.01  0.009603  0.00968406</code></pre><p>The columns contain the true values, the two-stage estimates and the joint estimates of <span>$c$</span>, <span>$k$</span>, <span>$σ_w$</span> and <span>$σ_e$</span>. In the two-stage procedure, <span>$c$</span> is estimated with the nominal noise covariances, and the subsequently estimated covariance of the disturbance force accounts for the remaining error in the model. The joint estimate does not have this dependence on the nominal covariances.</p><h2 id="Joint-state-and-parameter-estimation"><a class="docs-heading-anchor" href="#Joint-state-and-parameter-estimation">Joint state and parameter estimation</a><a id="Joint-state-and-parameter-estimation-1"></a><a class="docs-heading-anchor-permalink" href="#Joint-state-and-parameter-estimation" title="Permalink"></a></h2><p>A parameter that varies with time is estimated by modeling it as a state variable. We model the logarithm of the damping coefficient as a random walk, <span>$\frac{d}{dt} \log c = w_c$</span>, where <span>$w_c$</span> is an additional disturbance input. The data is generated with a damping coefficient that changes in a step halfway through the experiment. The setter is used to evaluate the discretized dynamics of <code>prob_true</code> with the time-varying value of <span>$c$</span>.</p><pre><code class="language-julia hljs">c_tv(t) = t &lt; N*Ts/2 ? 0.5 : 1.5
+setc = parameter_setter(prob_true, [cmodel.c])
+x_tv = [SA[0.0, 0.0]]
+for i in 1:N-1
+    w = SA[σw_true*randn()]
+    push!(x_tv, prob_true.f(x_tv[i], u[i], setc([c_tv(timevec[i])]), timevec[i], w))
+end
+y_tv = [SA[xi[1] + σe_true*randn()] for xi in x_tv]</code></pre><p>The model with the additional state variable <code>logc</code> is defined below. When the initial-state distribution is specified by distributions in <code>x0map</code>, all state variables must be given a distribution. The standard deviation <code>σc</code> of the random walk determines the trade-off between the rate at which the estimate tracks changes of <span>$c$</span> and the variance of the estimate.</p><pre><code class="language-julia hljs">@component function MassSpringDamperTV(; name)
+    pars = @parameters begin
+        m = 1.0
+        k = 1.0
+    end
+    vars = @variables begin
+        x(t) = 0.0
+        v(t) = 0.0
+        logc(t) = 0.0
+        u(t) = 0.0
+        y(t)
+        w(t), [disturbance = true, input = true]
+        w_c(t), [disturbance = true, input = true]
+    end
+    eqs = [
+        D(x) ~ v
+        m*D(v) ~ -k*x - exp(logc)*v + u + w
+        D(logc) ~ w_c
+        y ~ x
+    ]
+    return System(eqs, t, vars, pars; name)
+end
+
+@named model_tv = MassSpringDamperTV()
+cmodel_tv = complete(model_tv)
+σc = 0.2
+df_tv = SimpleMvNormal(SMatrix{2,2}(Diagonal([σw_true^2, σc^2])))
+x0map = [
+    cmodel_tv.x =&gt; Normal(0.0, 0.1),
+    cmodel_tv.v =&gt; Normal(0.0, 0.1),
+    cmodel_tv.logc =&gt; Normal(0.0, 1.0),
+]
+prob_tv = StateEstimationProblem(model_tv, [cmodel_tv.u], [cmodel_tv.y];
+    disturbance_inputs = [cmodel_tv.w, cmodel_tv.w_c], discretization, Ts,
+    df = df_tv, dg = dg_true, x0map, pmap = [cmodel_tv.k =&gt; k_true])
+fsol_tv = forward_trajectory(get_filter(prob_tv, UnscentedKalmanFilter), u, y_tv)
+sol_tv = StateEstimationSolution(fsol_tv, prob_tv)
+plot(sol_tv, idxs = [cmodel_tv.logc], xlabel = &quot;Time [s]&quot;)
+plot!(timevec, log.(c_tv.(timevec)), lab = &quot;True log(c)&quot;)</code></pre><img src="199a708a.svg" alt="Example block output"/><p>The plot shows the estimated mean of <code>logc</code> together with a 95% confidence band. The estimates of <code>logc</code> are also available through symbolic indexing, e.g., <code>sol_tv[cmodel_tv.logc]</code>, and the posterior distribution of any expression of the state variables is obtained with, e.g., <code>sol_tv[exp(cmodel_tv.logc), dist = true]</code>.</p><h2 id="Pitfalls"><a class="docs-heading-anchor" href="#Pitfalls">Pitfalls</a><a id="Pitfalls-1"></a><a class="docs-heading-anchor-permalink" href="#Pitfalls" title="Permalink"></a></h2><ul><li><strong>The constant <code>R1</code> of the <code>ExtendedKalmanFilter</code></strong>: With <code>constant_R1 = true</code> (the default), the covariance <span>$R_1 = B_w Σ_w B_w^T$</span> of the <code>ExtendedKalmanFilter</code> is evaluated with <span>$B_w$</span> linearized at the mean of <code>prob.d0</code> and <span>$u = 0$</span>. If <span>$B_w$</span> depends on the state or the input, pass <code>constant_R1 = false</code>.</li><li><strong>Noise covariances of the <code>DAEUnscentedKalmanFilter</code></strong>: For the <code>DAEUnscentedKalmanFilter</code>, <code>df.Σ</code> is used as the covariance of the noise added to the differential state variables in each time step if <span>$n_w$</span> equals the number of differential state variables, otherwise it is projected onto the differential state variables through the continuous-time <span>$B_w$</span>. Estimated covariances thus do not transfer between the <code>UnscentedKalmanFilter</code> for ODE models and the <code>DAEUnscentedKalmanFilter</code>.</li><li><strong>Bound parameters and parameters solved during initialization</strong>: A parameter defined as an expression of other parameters, e.g., <code>@parameters d = 2a</code>, is a bound parameter. It is not part of <code>prob.p</code> and cannot be passed to <code>parameter_setter</code>, but it is recomputed by the generated code when the parameters it depends on change. In contrast, parameters that are solved for during initialization (binding <code>missing</code>) are not recomputed by <code>remake</code>.</li><li><strong>Unit conversions</strong>: Express conversions between the units of the model and the units of the measurements in the output equations of the model, e.g., <code>y ~ 1000x</code> for a position measured in millimeters, rather than by modifying the data. The estimated measurement-noise covariance then refers to the units of the measurements.</li><li><strong>Initial state computed during initialization</strong>: If the problem is constructed with <code>init = true</code>, the mean of <code>prob.d0</code> is the solution of the initialization problem for the original parameters, and it is not recomputed by <code>remake</code>. If the initial state depends on the estimated parameters, widen the initial covariance, estimate the initial state together with the parameters, or construct a new problem for the estimated parameters.</li><li><strong>Absent measurements</strong>: Represent absent samples in <code>y</code> by <code>missing</code> (supported in LowLevelParticleFilters ≥ 3.34), the filters then omit the measurement update for these samples. Never use sentinel values such as zero or <code>NaN</code>, since the filter treats them as measurements.</li><li><strong>Noise semantics of hand-built filters</strong>: <a href="../api/#LowLevelParticleFiltersMTK.get_filter-Tuple{StateEstimationProblem, Type{LowLevelParticleFilters.DAEUnscentedKalmanFilter}}"><code>get_filter</code></a> constructs the <code>UnscentedKalmanFilter</code> with augmented dynamics, i.e., the disturbance inputs are propagated through the dynamics and <code>R1</code> is the covariance of the disturbance inputs. A non-augmented <code>UnscentedKalmanFilter</code> constructed by hand from <code>prob.f</code> instead adds noise with covariance <code>R1</code> directly to the state, which changes the meaning, and the dimensions, of <code>R1</code>.</li><li><strong>Construction of problems in the cost function</strong>: Use <a href="../api/#SciMLBase.remake-Tuple{StateEstimationProblem}"><code>remake</code></a> in the cost function rather than constructing a new <a href="../api/#LowLevelParticleFiltersMTK.StateEstimationProblem-Tuple{Any, Any, Any}"><code>StateEstimationProblem</code></a>. The constructor performs structural simplification and code generation in each evaluation of the cost function, which is considerably more expensive than <code>remake</code>.</li><li><strong>Simulation-error criteria</strong>: Estimation of the parameters with respect to a simulation-error criterion by means of an extremely large measurement-noise covariance <code>R2</code> in the filter is numerically poorly conditioned. Use <code>LowLevelParticleFilters.multistep_sse</code> or <code>LowLevelParticleFilters.multistep_prediction_errors!</code> (available in LowLevelParticleFilters ≥ 3.34) instead, which compute the errors of predictions over a horizon of multiple time steps. A long horizon approximates a simulation-error criterion.</li></ul></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Home</a><a class="docs-footer-nextpage" href="../api/">API »</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.19.0 on <span class="colophon-date" title="Friday 2 October 2026 07:14">Friday 2 October 2026</span>. Using Julia version 1.11.9.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
